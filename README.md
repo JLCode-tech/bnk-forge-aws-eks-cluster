@@ -38,17 +38,27 @@ Implementation status across the AWS-specific deployment chain:
 | `modules/eks-cluster-license` | BNK License CR. | Not yet implemented |
 | `modules/eks-cluster-create` | VPC + subnets + EKS cluster + node groups (provisioning, alternate to register). | Not yet implemented |
 
-## AWS credential template
+## AWS credentials
 
-Every module and blueprint in this repo expects these names, which match the Forge AWS credential template fields:
+Forge supports **three AWS auth methods** on the AWS credential template — all three work with the modules and blueprints in this repo:
 
-| Variable | Source | Sensitive |
-|---|---|---|
-| `aws_access_key_id` | Credential template | Yes |
-| `aws_secret_access_key` | Credential template | Yes |
-| `aws_region` | Project (`region` field) | No |
-| `aws_session_token` | Credential template (optional, STS-assumed-role only) | Yes |
-| `cne_pull_secret` | Project secret — base64 F5 FAR service account JSON or dockerconfigjson | Yes |
+| Forge auth method | Forge resolves to |
+|---|---|
+| `access_keys` — Static IAM access key + secret (+ optional session token for STS-assumed-role) | `access_key_id`, `secret_access_key`, `session_token` at deploy time |
+| `profile` — Named AWS profile on the Forge runner (`~/.aws/credentials` profile reference) | Same three values, extracted from the profile session via boto3 |
+| `sso` — AWS SSO / IAM Identity Center | Same three values, refreshed from the SSO session |
+
+At deploy time, Forge's `aws_auth_service` calls `boto3.Session.get_credentials()` regardless of which method the template uses — all three normalize to the same `access_key_id` + `secret_access_key` + `session_token` injection. The modules in this repo accept those three values and don't care which underlying method produced them.
+
+### Variables Forge sets
+
+| Variable | Source | Sensitive | Notes |
+|---|---|---|---|
+| `aws_access_key_id` | Credential template (resolved) | Yes | Populated for all 3 auth methods |
+| `aws_secret_access_key` | Credential template (resolved) | Yes | Populated for all 3 auth methods |
+| `aws_session_token` | Credential template (resolved) | Yes | Empty for static long-term keys; populated for STS / SSO / assumed-role |
+| `aws_region` | Project (`region` field) | No |  |
+| `cne_pull_secret` | Project secret | Yes | Base64 F5 FAR service-account JSON or dockerconfigjson |
 
 ## IAM permissions
 

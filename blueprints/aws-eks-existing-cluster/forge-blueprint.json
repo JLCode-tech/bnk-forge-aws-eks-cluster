@@ -48,8 +48,8 @@
     },
     {
       "type": "credential_template",
-      "name": "aws_access_key_id",
-      "description": "AWS credential template that supplies the access key ID, secret access key, region, and (optionally) session token."
+      "name": "aws_credentials",
+      "description": "AWS credential template using any of Forge's three auth methods: access_keys (static IAM keys), profile (named AWS profile on the Forge runner), or sso (AWS SSO / Identity Center). All three resolve to the same access_key_id + secret_access_key + session_token at deploy time."
     },
     {
       "type": "project_secret",
@@ -68,7 +68,7 @@
       {
         "name": "aws_access_key_id",
         "type": "string",
-        "description": "AWS access key ID.",
+        "description": "AWS access key ID. Auto-resolved from the AWS credential template regardless of auth method (access_keys / profile / sso).",
         "sensitive": true,
         "source": "credential_template",
         "source_field": "aws_access_key_id",
@@ -77,7 +77,7 @@
       {
         "name": "aws_secret_access_key",
         "type": "string",
-        "description": "AWS secret access key.",
+        "description": "AWS secret access key. Auto-resolved from the AWS credential template regardless of auth method.",
         "sensitive": true,
         "source": "credential_template",
         "source_field": "aws_secret_access_key",
@@ -110,7 +110,7 @@
       {
         "name": "aws_session_token",
         "type": "string",
-        "description": "AWS session token (only required for STS-assumed-role credentials).",
+        "description": "AWS session token. Populated for STS, SSO, and assumed-role-derived profiles; empty for long-lived IAM user keys.",
         "default": "",
         "sensitive": true,
         "source": "credential_template",
