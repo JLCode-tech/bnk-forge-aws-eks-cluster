@@ -35,14 +35,14 @@
       {
         "name": "aws_access_key_id",
         "type": "string",
-        "description": "AWS access key ID for discovering the existing EKS cluster.",
+        "description": "AWS access key ID. Resolved by Forge's credential template at deploy time — populated for all three auth methods (access_keys, profile, sso) via boto3 normalization.",
         "source": "user",
         "sensitive": true
       },
       {
         "name": "aws_secret_access_key",
         "type": "string",
-        "description": "AWS secret access key for discovering the existing EKS cluster.",
+        "description": "AWS secret access key. Resolved by Forge's credential template at deploy time. Populated regardless of auth method.",
         "source": "user",
         "sensitive": true
       },
@@ -63,7 +63,7 @@
       {
         "name": "aws_session_token",
         "type": "string",
-        "description": "AWS session token (only required for STS-assumed-role credentials). Leave empty for static IAM user keys.",
+        "description": "AWS session token. Populated for STS-assumed-role, AWS SSO, and any profile that derives temporary credentials. Empty for long-lived IAM user keys.",
         "source": "user",
         "sensitive": true,
         "default": ""
@@ -119,19 +119,19 @@
       {
         "name": "aws_access_key_id",
         "type": "cloud",
-        "description": "AWS credential template or project secret providing the access key ID."
+        "description": "AWS credential template (any auth method — access_keys, profile, or sso). Forge resolves it to access_key_id at deploy time."
       },
       {
         "name": "aws_secret_access_key",
         "type": "cloud",
-        "description": "AWS credential template or project secret providing the secret access key."
+        "description": "AWS credential template (any auth method). Forge resolves to secret_access_key at deploy time."
       }
     ],
     "optional": [
       {
         "name": "aws_session_token",
         "type": "cloud",
-        "description": "AWS session token (only for STS-assumed-role credentials)."
+        "description": "AWS credential template (any auth method). Forge populates this for STS / SSO / profiles that derive temporary credentials; empty for static long-lived keys."
       }
     ]
   }
