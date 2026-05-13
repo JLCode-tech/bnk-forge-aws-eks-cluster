@@ -27,7 +27,33 @@ data "aws_eks_cluster_auth" "existing" {
   name = var.eks_cluster_name
 }
 
+# Look up each subnet the EKS cluster has in vpc_config.subnet_ids so we
+# can expose them grouped by AZ. Downstream modules (cneinstall) consume
+# this to auto-populate the cloud-network-mapping ConfigMap without
+# making the user re-enter AZ/subnet IDs that EKS already knows about.
+data "aws_subnet" "cluster_subnets" {
+  for_each = toset(data.aws_eks_cluster.existing.vpc_config[0].subnet_ids)
+  id       = each.value
+}
+
 locals {
+  # Group subnets by AZ. Each AZ entry holds the list of (cidr, subnet_id)
+  # pairs in that AZ. Matches the shape cneinstall's
+  # cloud-network-mapping ConfigMap expects.
+  subnets_by_az = {
+    for s in data.aws_subnet.cluster_subnets : s.availability_zone => {
+      cidr      = s.cidr_block
+      subnet_id = s.id
+    }...
+  }
+
+  az_subnet_mappings = [
+    for az, subnets in local.subnets_by_az : {
+      name    = az
+      subnets = subnets
+    }
+  ]
+
   kubeconfig = yamlencode({
     apiVersion      = "v1"
     kind            = "Config"

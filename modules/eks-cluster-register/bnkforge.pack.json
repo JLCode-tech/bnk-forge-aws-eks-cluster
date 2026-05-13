@@ -111,6 +111,21 @@
         "name": "region",
         "type": "string",
         "description": "AWS region for the cluster."
+      },
+      {
+        "name": "vpc_id",
+        "type": "string",
+        "description": "VPC ID the EKS cluster lives in."
+      },
+      {
+        "name": "subnet_ids",
+        "type": "list(string)",
+        "description": "All subnet IDs attached to the EKS cluster's VPC config."
+      },
+      {
+        "name": "cloud_az_subnet_mappings",
+        "type": "list(object({name=string,subnets=list(object({cidr=string,subnet_id=string}))}))",
+        "description": "AZ → subnets list discovered from the cluster's VPC config. Consumed by eks-cluster-cneinstall to auto-populate the cloud-network-mapping ConfigMap so users don't have to re-enter what EKS already knows."
       }
     ]
   },

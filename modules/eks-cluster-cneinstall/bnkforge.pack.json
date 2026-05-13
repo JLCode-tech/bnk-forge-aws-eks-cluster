@@ -214,9 +214,11 @@
       {
         "name": "cloud_az_subnet_mappings",
         "type": "list(object({name=string,subnets=list(object({cidr=string,subnet_id=string}))}))",
-        "description": "AWS AZ → subnet mapping for the cloud-network-mapping ConfigMap (required for AWS multi-AZ TMM placement). Empty list = skip the ConfigMap (CNE controller will likely misbehave — set this for production).",
+        "description": "AWS AZ → subnet mapping for the cloud-network-mapping ConfigMap. Auto-wired from eks-cluster-register.cloud_az_subnet_mappings — discovered from the EKS cluster's own VPC config, so users don't have to re-enter what EKS already knows.",
         "default": [],
-        "source": "user"
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "cloud_az_subnet_mappings"
       },
       {
         "name": "bnk_gateway_chassis",

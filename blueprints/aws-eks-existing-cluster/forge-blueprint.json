@@ -199,13 +199,6 @@
         "order": 73
       },
       {
-        "name": "cloud_az_subnet_mappings",
-        "type": "list(object)",
-        "description": "AWS AZ → subnet mapping for the cloud-network-mapping ConfigMap. Required for multi-AZ TMM placement. Schema: [{name='us-east-1a', subnets=[{cidr='192.168.1.0/24', subnet_id='subnet-aaa'}]}]. Empty list = skip the ConfigMap.",
-        "default": [],
-        "order": 80
-      },
-      {
         "name": "bnk_gateway_chassis",
         "type": "object",
         "description": "F5BnkGateway chassis config — required on AWS/EKS for Gateway-API translation. Schema: {name='bnk-gateway-chassis', default_listener_networks=[{name='public', start_address='10.0.0.1', end_address='10.0.0.254'}]}. Empty default_listener_networks list = skip CR creation.",
@@ -300,7 +293,6 @@
         "tmm_replicas": "${tmm_replicas}",
         "watch_namespaces": "${watch_namespaces}",
         "network_attachments": "${network_attachments}",
-        "cloud_az_subnet_mappings": "${cloud_az_subnet_mappings}",
         "bnk_gateway_chassis": "${bnk_gateway_chassis}"
       }
     }
