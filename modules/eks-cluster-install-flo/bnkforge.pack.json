@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "EKS Cluster Install FLO",
+    "path": "modules/eks-cluster-install-flo",
+    "version": "2.0.0",
+    "category": "bnk",
+    "description": "Install F5 Lifecycle Operator (FLO) on AWS EKS — Helm release with BNK licensing and cert-manager ClusterIssuer wiring. AWS-tuned default for container_platform.",
+    "provider": "aws",
+    "supported_platforms": ["aws_eks"],
+    "tags": ["aws", "eks", "bnk", "flo", "f5", "lifecycle", "helm"]
+  },
+  "deployment_pack": {
+    "engine": "kubernetes",
+    "runner_profile": "kubernetes-default",
+    "working_directory": ".",
+    "lifecycle": {
+      "supports_init": false,
+      "supports_plan": false,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": false,
+      "supports_drift": false
+    },
+    "entrypoints": {
+      "chart_ref": "oci://repo.f5.com/charts/f5-lifecycle-operator",
+      "chart_version": "${flo_version}",
+      "namespace": "${flo_namespace}",
+      "release_name": "flo",
+      "create_namespace": true,
+      "values_path": "values.yaml"
+    }
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "modules/eks-cluster-install-bnk-prereqs",
+        "reason": "Needs namespaces, FAR pull secret name, and FLO chart version wiring"
+      },
+      {
+        "module": "modules/eks-cluster-install-cert-issuer",
+        "reason": "FLO uses cert-manager ClusterIssuer for certificate management"
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "flo_namespace",
+        "type": "string",
+        "description": "Namespace for FLO deployment. Auto-wired from bnk-prereqs.operator_namespace.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-bnk-prereqs",
+        "from_output": "operator_namespace",
+        "default": "f5-operator"
+      },
+      {
+        "name": "flo_version",
+        "type": "string",
+        "description": "FLO Helm chart version. Auto-wired from the BNK manifest parsed by bnk-prereqs.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-bnk-prereqs",
+        "from_output": "flo_version"
+      },
+      {
+        "name": "far_secret_name",
+        "type": "string",
+        "description": "FAR image pull secret name. Auto-wired from bnk-prereqs.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-bnk-prereqs",
+        "from_output": "far_secret_name",
+        "default": "far-secret"
+      },
+      {
+        "name": "cluster_issuer_name",
+        "type": "string",
+        "description": "ClusterIssuer name for FLO certificate management. Auto-wired from cert-issuer.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-cert-issuer",
+        "from_output": "cluster_issuer_name",
+        "default": "bnk-ca-cluster-issuer"
+      },
+      {
+        "name": "jwt_token",
+        "type": "string",
+        "description": "F5 BNK License JWT. Bind to a project secret in the deploy form.",
+        "source": "user",
+        "sensitive": true
+      }
+    ],
+    "optional": [
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "EKS cluster name. Auto-wired from the cluster-register module.",
+        "default": "",
+        "source": "auto"
+      },
+      {
+        "name": "license_mode",
+        "type": "string",
+        "description": "License mode: 'connected' (talks to F5 license server) or 'f5licenseproxy' (talks to a local F5 License Proxy).",
+        "default": "connected",
+        "source": "user"
+      },
+      {
+        "name": "f5_license_proxy_url",
+        "type": "string",
+        "description": "F5 License Proxy URL — used only when license_mode is 'f5licenseproxy'.",
+        "default": "",
+        "source": "user"
+      },
+      {
+        "name": "cert_manager_ready",
+        "type": "boolean",
+        "description": "Dependency gate from cert-manager (ensures CRDs exist before FLO references the ClusterIssuer).",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-cert-manager",
+        "from_output": "cert_manager_ready",
+        "default": true
+      },
+      {
+        "name": "container_platform",
+        "type": "string",
+        "description": "Container platform value passed to FLO. AWS enables cloud-aware gRPC and networking behavior — different from the upstream bnk/flo default of 'Generic'.",
+        "default": "AWS",
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "flo_namespace",
+        "type": "string",
+        "description": "Namespace where FLO is deployed."
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Gate output indicating FLO is ready."
+      },
+      {
+        "name": "crds_installed",
+        "type": "boolean",
+        "description": "Gate output indicating FLO CRDs are registered with the cluster API."
+      }
+    ]
+  }
+}
