@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "blueprint": {
+    "id": "aws-eks-existing-cluster",
+    "version": "0.1.0",
+    "name": "AWS EKS Existing Cluster",
+    "description": "Adopt an existing AWS EKS cluster and emit BNK registration outputs. This is the first step of the existing-cluster blueprint chain; additional modules (cert-manager, BNK prerequisites, FLO, CNEInstance, License) will be added in subsequent revisions."
+  },
+  "compatibility": {
+    "supported_platform_profiles": ["aws_eks"],
+    "required_capabilities": []
+  },
+  "category": "infrastructure",
+  "cloud_provider": "aws",
+  "icon": "Server",
+  "color": "orange",
+  "estimated_time": "5-10 minutes (cluster-register only; full chain TBD)",
+  "estimated_cost": "AWS usage-based",
+  "difficulty": "intermediate",
+  "maturity": "preview",
+  "tags": ["aws", "eks", "kubernetes", "cluster", "register"],
+  "outcomes": [
+    "An existing AWS EKS cluster is referenced by name",
+    "Cluster outputs are available for BNK managed-cluster registration",
+    "A kubeconfig with a short-lived STS token is emitted for downstream modules"
+  ],
+  "prerequisites": [
+    {
+      "type": "requirement",
+      "description": "The modules/eks-cluster-register deployment pack from this repository must already be synced into Forge."
+    },
+    {
+      "type": "credential_template",
+      "name": "aws_access_key_id",
+      "description": "Provide an AWS credential template or project secret that can supply the AWS access key ID and secret access key."
+    }
+  ],
+  "input_summary": [
+    {
+      "label": "Input guidance",
+      "value": "Provide AWS credentials, region, and the name of the existing EKS cluster you want to adopt."
+    }
+  ],
+  "inputs": {
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "string",
+        "description": "AWS access key ID.",
+        "sensitive": true,
+        "source": "credential_template",
+        "source_field": "aws_access_key_id",
+        "order": 10
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "string",
+        "description": "AWS secret access key.",
+        "sensitive": true,
+        "source": "credential_template",
+        "source_field": "aws_secret_access_key",
+        "order": 11
+      },
+      {
+        "name": "aws_region",
+        "type": "string",
+        "description": "AWS region where the existing EKS cluster resides.",
+        "source": "credential_template",
+        "source_field": "aws_region",
+        "order": 12
+      },
+      {
+        "name": "eks_cluster_name",
+        "type": "string",
+        "description": "Name of the existing AWS EKS cluster to adopt.",
+        "order": 20
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "string",
+        "description": "AWS session token (only required for STS-assumed-role credentials).",
+        "default": "",
+        "sensitive": true,
+        "source": "credential_template",
+        "source_field": "aws_session_token",
+        "order": 13
+      }
+    ]
+  },
+  "modules": [
+    {
+      "id": "cluster-register",
+      "name": "EKS Cluster Register",
+      "description": "Reference an existing EKS cluster and emit BNK registration outputs.",
+      "module": "modules/eks-cluster-register",
+      "version": "1.0.0",
+      "depends_on": [],
+      "inputs": {
+        "aws_access_key_id": "${aws_access_key_id}",
+        "aws_secret_access_key": "${aws_secret_access_key}",
+        "aws_session_token": "${aws_session_token}",
+        "aws_region": "${aws_region}",
+        "eks_cluster_name": "${eks_cluster_name}"
+      }
+    }
+  ]
+}

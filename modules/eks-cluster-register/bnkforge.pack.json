@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "aws_eks_cluster_register_existing",
+    "path": "modules/eks-cluster-register",
+    "version": "1.0.0",
+    "category": "infra",
+    "description": "Reference an existing AWS EKS cluster and emit BNK cluster-registration outputs.",
+    "provider": "aws",
+    "supported_platforms": ["aws_eks"],
+    "tags": ["aws", "eks", "kubernetes", "cluster", "registration", "infrastructure"]
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "dependencies": {
+    "required": [],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "string",
+        "description": "AWS access key ID for discovering the existing EKS cluster.",
+        "source": "user",
+        "sensitive": true
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "string",
+        "description": "AWS secret access key for discovering the existing EKS cluster.",
+        "source": "user",
+        "sensitive": true
+      },
+      {
+        "name": "aws_region",
+        "type": "string",
+        "description": "AWS region where the existing EKS cluster resides.",
+        "source": "user"
+      },
+      {
+        "name": "eks_cluster_name",
+        "type": "string",
+        "description": "Existing AWS EKS cluster name.",
+        "source": "user"
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "string",
+        "description": "AWS session token (only required for STS-assumed-role credentials). Leave empty for static IAM user keys.",
+        "source": "user",
+        "sensitive": true,
+        "default": ""
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "cluster_id",
+        "type": "string",
+        "description": "EKS cluster ARN — used by BNK Forge for cluster registration."
+      },
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "EKS cluster name."
+      },
+      {
+        "name": "cluster_endpoint",
+        "type": "string",
+        "description": "EKS cluster API endpoint."
+      },
+      {
+        "name": "eks_cluster_arn",
+        "type": "string",
+        "description": "EKS cluster ARN (explicit name)."
+      },
+      {
+        "name": "eks_cluster_version",
+        "type": "string",
+        "description": "EKS Kubernetes minor version."
+      },
+      {
+        "name": "cluster_certificate_authority_data",
+        "type": "string",
+        "description": "Base64-encoded cluster CA certificate."
+      },
+      {
+        "name": "cluster_oidc_issuer_url",
+        "type": "string",
+        "description": "OIDC issuer URL — used downstream for IRSA configuration."
+      },
+      {
+        "name": "region",
+        "type": "string",
+        "description": "AWS region for the cluster."
+      }
+    ]
+  },
+  "credentials": {
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "cloud",
+        "description": "AWS credential template or project secret providing the access key ID."
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "cloud",
+        "description": "AWS credential template or project secret providing the secret access key."
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "cloud",
+        "description": "AWS session token (only for STS-assumed-role credentials)."
+      }
+    ]
+  }
+}
