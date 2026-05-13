@@ -1,84 +1,88 @@
-# BNK Forge — AWS EKS Cluster
+# bnk-forge-catalog-aws-eks
 
-Forge-ready AWS EKS content covering the full BNK install on top of an
-AWS-managed Elastic Kubernetes Service cluster:
+BNK Forge catalog for deploying [F5 BIG-IP Next for Kubernetes](https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/) on **AWS EKS**.
 
-1. **Get a cluster** — either provision one or reference an existing one.
-2. **Install cert-manager.**
-3. **Install BNK prerequisites** (namespaces, FAR pull secrets, manifest).
-4. **Install the F5 Lifecycle Operator (FLO).**
-5. **Deploy a CNEInstance.**
-6. **Apply the BNK License.**
+## Deploy BNK on AWS EKS
 
-Each step is its own Forge-ready module; two blueprints chain them together end-to-end.
+The intended user flow, end-to-end:
 
-## Modules
+1. **In Forge → Settings → Module Sources**, add this repo:
+   - URL: `https://github.com/JLCode-tech/bnk-forge-catalog-aws-eks.git`
+   - Ref: the `release/2.x` branch matching the BNK version you want (`release/2.2` today)
+   - Forge auto-registers it as both a Module Source *and* a Blueprint Source.
+2. **In Forge → Settings → Credential Templates**, set up an **AWS credential template** that supplies `aws_access_key_id`, `aws_secret_access_key`, and `aws_region` (plus optional `aws_session_token` for STS-assumed roles).
+3. **In Forge → Projects**, create an AWS project linked to that credential template.
+4. **In Forge → Blueprints**, import the blueprint that fits your scenario (see [Blueprints](#blueprints) below) and deploy into your project.
 
-| Module path | Purpose |
-| ----------- | ------- |
-| `modules/eks-cluster-create` | Create an AWS EKS cluster (VPC, subnets, node groups, OIDC provider, cluster add-ons). Emits the outputs BNK Forge needs to register the cluster, plus the kubeconfig. *(not yet implemented)* |
-| `modules/eks-cluster-register` | Resolve an existing AWS EKS cluster by name and emit the same registration outputs + kubeconfig. |
-| `modules/eks-cluster-install-bnk-prereqs` | Create BNK namespaces, FAR image pull secrets, download the BNK manifest. Vendored from `bnk-forge-catalog-shared`. |
-| `modules/eks-cluster-install-cert-manager` | Install cert-manager (Helm chart, BNK-compatible defaults). Vendored from `bnk-forge-catalog-shared`. |
-| `modules/eks-cluster-install-cert-issuer` | Create the BNK-managed self-signed CA and ClusterIssuer. Vendored from `bnk-forge-catalog-shared`. |
-| `modules/eks-cluster-install-flo` | Install F5 Lifecycle Operator with AWS-tuned defaults (IRSA, NAD setup). *(not yet implemented)* |
-| `modules/eks-cluster-cneinstall` | Deploy a `CNEInstance` custom resource with AWS-specific chassis configuration (auto-creates the `F5BnkGateway` chassis CR for AWS/EKS). *(not yet implemented)* |
-| `modules/eks-cluster-license` | Apply the BNK License CR. *(not yet implemented)* |
+After apply succeeds, Forge auto-registers your EKS cluster in its Kubernetes inventory — no manual scan or kubeconfig handoff step.
 
 ## Blueprints
 
-| Blueprint | Module chain |
-| --------- | ------------ |
-| `blueprints/aws-eks-cluster-create` | `cluster-create` → `cert-manager` → `bnk-prereqs` → `flo` → `cneinstance` → `license` *(not yet implemented)* |
-| `blueprints/aws-eks-existing-cluster` | `cluster-register` → `bnk-prereqs` → `cert-manager` → `cert-issuer` → `flo` → `cneinstance` → `license` |
+| Blueprint | When to use | Status |
+|---|---|---|
+| [`blueprints/aws-eks-existing-cluster`](./blueprints/aws-eks-existing-cluster) | You already have an EKS cluster (provisioned by Terraform, the AWS console, eksctl, etc.) and want Forge to adopt it and lay down the BNK stack on top. | Implemented through cert-issuer; FLO + CNEInstance + License pending |
+| `blueprints/aws-eks-cluster-create` | You want Forge to provision a new EKS cluster end-to-end (VPC, subnets, node groups, BNK stack). | Not yet implemented |
 
-Both blueprints set explicit `order` on every input so the deploy form follows the deployment flow: AWS credentials → cluster identity → cert-manager → BNK prereqs → FLO → CNEInstance → License.
+## Modules
 
-## Repo model
+Implementation status across the AWS-specific deployment chain:
 
-This is a **long-lived repo** with **branches per BNK release**:
+| Module | Role | Status |
+|---|---|---|
+| [`modules/eks-cluster-register`](./modules/eks-cluster-register) | Adopt an existing EKS cluster; emit BNK registration outputs. | Implemented (AWS-specific, written in this repo) |
+| [`modules/eks-cluster-install-bnk-prereqs`](./modules/eks-cluster-install-bnk-prereqs) | Namespaces, FAR pull secrets, BNK manifest download. | Implemented (vendored from `bnk-forge-catalog-shared`) |
+| [`modules/eks-cluster-install-cert-manager`](./modules/eks-cluster-install-cert-manager) | Jetstack cert-manager install. | Implemented (vendored) |
+| [`modules/eks-cluster-install-cert-issuer`](./modules/eks-cluster-install-cert-issuer) | BNK self-signed CA + ClusterIssuer. | Implemented (vendored) |
+| `modules/eks-cluster-install-flo` | F5 Lifecycle Operator install with AWS IRSA for the FLO controller and BIG-IP CIS service account. | Not yet implemented |
+| `modules/eks-cluster-cneinstall` | CNEInstance CR with AWS-specific `F5BnkGateway` chassis logic and ENA/SR-IOV chassis config. | Not yet implemented |
+| `modules/eks-cluster-license` | BNK License CR. | Not yet implemented |
+| `modules/eks-cluster-create` | VPC + subnets + EKS cluster + node groups (provisioning, alternate to register). | Not yet implemented |
 
-- `release/2.2` — BNK 2.2 content
-- `release/2.3` — BNK 2.3 content *(future)*
-- `release/2.4`, `release/3.x` — as BNK ships them
+## AWS credential template
 
-`main` tracks the most recent release branch. Customers select which BNK version they want by pointing Forge's Module Source at the matching branch or tag.
+Every module and blueprint in this repo expects these names, which match the Forge AWS credential template fields:
 
-## Shared k8s primitives
+| Variable | Source | Sensitive |
+|---|---|---|
+| `aws_access_key_id` | Credential template | Yes |
+| `aws_secret_access_key` | Credential template | Yes |
+| `aws_region` | Project (`region` field) | No |
+| `aws_session_token` | Credential template (optional, STS-assumed-role only) | Yes |
+| `cne_pull_secret` | Project secret — base64 F5 FAR service account JSON or dockerconfigjson | Yes |
 
-The shared cloud-agnostic Kubernetes primitives (`bnk-prerequisites`, `cert-manager`, `bnk-cert-issuer`) live in [`bnk-forge-catalog-shared`](https://github.com/JLCode-tech/bnk-forge-catalog-shared). This repo **vendors** them at a pinned tag — when `bnk-forge-catalog-shared` ships a new release tag, a vendor-refresh PR re-copies them in. `bnk-forge-catalog-shared` remains the canonical source; Forge never has to resolve cross-repo module references.
+## IAM permissions
 
-## AWS Credential Template compatibility
+**For the deployer (the IAM principal whose credentials Forge uses):**
 
-Every module and both blueprints use the BNK Forge AWS credential-template variable names:
+The `eks-cluster-register` module needs at minimum:
+- `eks:DescribeCluster` on the target cluster
+- `sts:GetCallerIdentity`
 
-- `aws_access_key_id`
-- `aws_secret_access_key`
-- `aws_session_token` *(optional, for STS-assumed-role)*
-- `aws_region`
+When the install modules ship, FLO with IRSA will additionally need:
+- `iam:CreateRole`, `iam:AttachRolePolicy`, `iam:CreateOpenIDConnectProvider` (or equivalent if the OIDC provider is pre-created)
 
-That lets BNK Forge prefill these values from the selected AWS Credential Template in both flows:
+**For the EKS cluster:**
 
-- **Add Module to Project**
-- **Imported Blueprint deployment**
+The deployer principal must be mapped into the cluster's `aws-auth` ConfigMap (or use EKS access entries on clusters that have them enabled) for `system:masters` or another role that can apply CRDs and namespaces.
 
-## BNK registration outputs
+## Branch model
 
-The `eks-cluster-create` and `eks-cluster-register` modules emit the fields BNK Forge needs to auto-register the cluster in the Kubernetes inventory:
+This repo carries one branch per BNK release: `release/2.2`, future `release/2.3`, etc. `main` tracks the most recent release branch. Point your Forge Module Source at the branch matching your BNK version.
 
-- `cluster_name`
-- `cluster_id` (EKS cluster ARN)
-- `cluster_endpoint`
-- `region`
-- `kubeconfig` (base64-encoded; bnk-forge adopts it on first scan)
+## Vendored shared modules
 
-After apply succeeds, BNK Forge auto-registers the cluster — no manual step required.
+Three of the modules here (`eks-cluster-install-bnk-prereqs`, `eks-cluster-install-cert-manager`, `eks-cluster-install-cert-issuer`) are **vendored** from [`bnk-forge-catalog-shared`](https://github.com/JLCode-tech/bnk-forge-catalog-shared) — they're not authored here. The current pin is in [`VENDORED.pin`](./VENDORED.pin); the discipline and refresh model are in [`VENDORED.md`](./VENDORED.md).
 
-## Import into BNK Forge
+A vendor-refresh PR is opened automatically when `bnk-forge-catalog-shared` ships changes — `.github/workflows/vendor-refresh.yml` listens for the upstream's `bnk-forge-modules-released` dispatch and runs `scripts/vendor-refresh.sh`. A weekly Monday cron acts as a safety net.
 
-1. Add this repository as both a **Module Source** and a **Blueprint Source** and sync it.
-2. Import the blueprint that fits your scenario:
-   - `aws-eks-cluster-create` for new clusters.
-   - `aws-eks-existing-cluster` for clusters that already exist.
-3. Deploy the imported blueprint into an AWS project that is linked to an AWS Credential Template.
-4. After apply succeeds, BNK Forge will register the cluster on its Kubernetes page automatically.
+**Do not hand-edit files inside a vendored module's directory** — they'll be clobbered on the next refresh. AWS-specific tuning belongs in a separate wrapper module.
+
+## Contributing
+
+This repo follows the [BNK Forge Catalog Repo Contract](https://github.com/JLCode-tech/bnk-forge-catalog-shared/blob/release/2.2/CATALOG_REPO_CONTRACT.md). Read it before opening a PR.
+
+## Related repos
+
+- [`bnk-forge-catalog-shared`](https://github.com/JLCode-tech/bnk-forge-catalog-shared) — upstream library for the vendored shared modules.
+- [`bnk-forge-modules`](https://github.com/JLCode-tech/bnk-forge-modules) — legacy/transitional source; existing Forge installations may still point there.
+- [`jgruberf5/bnk-forge-ibm-roks-cluster`](https://github.com/jgruberf5/bnk-forge-ibm-roks-cluster) — IBM ROKS catalog (community-maintained reference).
