@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloud-network-mapping
+  namespace: ${instance_namespace}
+  labels:
+    app: f5-cne-controller
+    component: network-config
+    app.kubernetes.io/managed-by: bnk-forge
+data:
+  config.yaml: |
+    availability_zones:
+%{ for az in az_subnet_mappings ~}
+      - name: "${az.name}"
+        subnets:
+%{ for subnet in az.subnets ~}
+          - cidr: "${subnet.cidr}"
+            subnet_id: "${subnet.subnet_id}"
+%{ endfor ~}
+%{ endfor ~}
