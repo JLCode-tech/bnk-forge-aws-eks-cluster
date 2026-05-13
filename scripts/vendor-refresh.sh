@@ -2,7 +2,7 @@
 #
 # vendor-refresh.sh
 #
-# Refresh vendored shared k8s modules from bnk-forge-modules.
+# Refresh vendored shared k8s modules from bnk-forge-catalog-shared.
 #
 # Vendored modules are pristine copies of the upstream — do not hand-edit
 # them. Any AWS-specific tuning belongs in a separate wrapper module
@@ -12,7 +12,7 @@
 # Usage:
 #   ./scripts/vendor-refresh.sh                  # uses default ref (release/2.2)
 #   UPSTREAM_REF=release/2.3 ./scripts/vendor-refresh.sh
-#   UPSTREAM_REPO=https://github.com/JLCode-tech/bnk-forge-modules.git \
+#   UPSTREAM_REPO=https://github.com/JLCode-tech/bnk-forge-catalog-shared.git \
 #     UPSTREAM_REF=v2.3.0 ./scripts/vendor-refresh.sh
 #
 # Exit code 0 if vendored modules match the requested ref (with rewrites
@@ -35,10 +35,12 @@ UPSTREAM_SHA="$(git -C "$WORK_DIR/upstream" rev-parse HEAD)"
 echo "    Pinned commit: $UPSTREAM_SHA"
 
 # Vendor mapping. Parallel arrays so the script works on bash 3.2 (macOS default).
+# Upstream paths reflect bnk-forge-catalog-shared's modules/<name>/ layout
+# (after its restructure PR — previously these were k8s/<name>/).
 UPSTREAM_PATHS=(
-  "k8s/bnk-prerequisites"
-  "k8s/cert-manager"
-  "k8s/bnk-cert-issuer"
+  "modules/bnk-prerequisites"
+  "modules/cert-manager"
+  "modules/bnk-cert-issuer"
 )
 LOCAL_NAMES=(
   "eks-cluster-install-bnk-prereqs"
@@ -52,15 +54,15 @@ LOCAL_NAMES=(
 #   inputs[*].from_module (module.json only): same rewrites
 rewrite_jq='
 def remap_dep:
-  if .module == "k8s/cert-manager" then .module = "modules/eks-cluster-install-cert-manager"
-  elif .module == "k8s/bnk-prerequisites" then .module = "modules/eks-cluster-install-bnk-prereqs"
-  elif .module == "k8s/bnk-cert-issuer" then .module = "modules/eks-cluster-install-cert-issuer"
+  if .module == "modules/cert-manager" then .module = "modules/eks-cluster-install-cert-manager"
+  elif .module == "modules/bnk-prerequisites" then .module = "modules/eks-cluster-install-bnk-prereqs"
+  elif .module == "modules/bnk-cert-issuer" then .module = "modules/eks-cluster-install-cert-issuer"
   else . end;
 
 def remap_from_module:
-  if .from_module == "k8s/cert-manager" then .from_module = "modules/eks-cluster-install-cert-manager"
-  elif .from_module == "k8s/bnk-prerequisites" then .from_module = "modules/eks-cluster-install-bnk-prereqs"
-  elif .from_module == "k8s/bnk-cert-issuer" then .from_module = "modules/eks-cluster-install-cert-issuer"
+  if .from_module == "modules/cert-manager" then .from_module = "modules/eks-cluster-install-cert-manager"
+  elif .from_module == "modules/bnk-prerequisites" then .from_module = "modules/eks-cluster-install-bnk-prereqs"
+  elif .from_module == "modules/bnk-cert-issuer" then .from_module = "modules/eks-cluster-install-cert-issuer"
   else . end;
 
 .module.path = $new_path
