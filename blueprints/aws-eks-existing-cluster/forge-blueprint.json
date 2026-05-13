@@ -2,43 +2,65 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-existing-cluster",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "name": "AWS EKS Existing Cluster",
-    "description": "Adopt an existing AWS EKS cluster and emit BNK registration outputs. This is the first step of the existing-cluster blueprint chain; additional modules (cert-manager, BNK prerequisites, FLO, CNEInstance, License) will be added in subsequent revisions."
+    "description": "Adopt an existing AWS EKS cluster and lay down the shared BNK k8s prerequisites (namespaces + FAR pull secrets + manifest), cert-manager, and the BNK cert issuer. FLO, CNEInstance, and License steps land in subsequent revisions."
   },
+  "bnk_version": "2.2",
   "compatibility": {
     "supported_platform_profiles": ["aws_eks"],
     "required_capabilities": []
   },
-  "category": "infrastructure",
+  "category": "bnk",
   "cloud_provider": "aws",
+  "platform_defaults": {
+    "eks": {
+      "container_platform": "Generic",
+      "storage_class_name": "gp3",
+      "cloud_provider": "aws",
+      "cni_type": "ipvlan",
+      "nad_cni_type": "ipvlan",
+      "nad_interface_name": "eth0",
+      "nad_ipvlan_mode": "l2",
+      "cert_manager_namespace": "cert-manager",
+      "flo_namespace": "f5-operator",
+      "flo_utils_namespace": "f5-utils"
+    }
+  },
   "icon": "Server",
   "color": "orange",
-  "estimated_time": "5-10 minutes (cluster-register only; full chain TBD)",
+  "estimated_time": "15-25 minutes (current chain; full BNK install longer)",
   "estimated_cost": "AWS usage-based",
   "difficulty": "intermediate",
   "maturity": "preview",
-  "tags": ["aws", "eks", "kubernetes", "cluster", "register"],
+  "tags": ["aws", "eks", "kubernetes", "cluster", "register", "cert-manager", "bnk-prereqs"],
   "outcomes": [
-    "An existing AWS EKS cluster is referenced by name",
-    "Cluster outputs are available for BNK managed-cluster registration",
+    "An existing AWS EKS cluster is referenced by name and adopted into BNK Forge",
+    "BNK namespaces, FAR pull secrets, and component manifest are deployed",
+    "Jetstack cert-manager is installed with BNK-compatible defaults",
+    "The BNK CA-backed ClusterIssuer is created and ready for FLO + OTEL certs",
     "A kubeconfig with a short-lived STS token is emitted for downstream modules"
   ],
   "prerequisites": [
     {
-      "type": "requirement",
-      "description": "The modules/eks-cluster-register deployment pack from this repository must already be synced into Forge."
+      "type": "kubernetes_cluster",
+      "description": "An existing AWS EKS cluster reachable from the project. Use the 'AWS EKS Cluster Create' blueprint to provision one if you don't have it yet (planned for a subsequent release)."
     },
     {
       "type": "credential_template",
       "name": "aws_access_key_id",
-      "description": "Provide an AWS credential template or project secret that can supply the AWS access key ID and secret access key."
+      "description": "AWS credential template that supplies the access key ID, secret access key, region, and (optionally) session token."
+    },
+    {
+      "type": "project_secret",
+      "name": "cne_pull_secret",
+      "description": "Base64-encoded F5 FAR registry credentials (bare service-account JSON key OR dockerconfigjson). Bound from a stored project secret in the deploy form."
     }
   ],
   "input_summary": [
     {
       "label": "Input guidance",
-      "value": "Provide AWS credentials, region, and the name of the existing EKS cluster you want to adopt."
+      "value": "Provide AWS credentials, region, the existing EKS cluster name, and the F5 FAR pull secret. Namespace and BNK manifest version defaults can be overridden if needed."
     }
   ],
   "inputs": {
@@ -65,8 +87,8 @@
         "name": "aws_region",
         "type": "string",
         "description": "AWS region where the existing EKS cluster resides.",
-        "source": "credential_template",
-        "source_field": "aws_region",
+        "source": "project",
+        "source_field": "region",
         "order": 12
       },
       {
@@ -74,6 +96,14 @@
         "type": "string",
         "description": "Name of the existing AWS EKS cluster to adopt.",
         "order": 20
+      },
+      {
+        "name": "cne_pull_secret",
+        "type": "string",
+        "description": "F5 FAR registry credentials. Bind to a stored project secret in the deploy form.",
+        "sensitive": true,
+        "source": "user",
+        "order": 30
       }
     ],
     "optional": [
@@ -86,6 +116,34 @@
         "source": "credential_template",
         "source_field": "aws_session_token",
         "order": 13
+      },
+      {
+        "name": "operator_namespace",
+        "type": "string",
+        "description": "Namespace for FLO and all BNK components.",
+        "default": "f5-operator",
+        "order": 40
+      },
+      {
+        "name": "utils_namespace",
+        "type": "string",
+        "description": "Namespace for utility components.",
+        "default": "f5-utils",
+        "order": 41
+      },
+      {
+        "name": "gateway_namespace",
+        "type": "string",
+        "description": "Namespace for Gateway API resources.",
+        "default": "bnk-gw",
+        "order": 42
+      },
+      {
+        "name": "bnk_manifest_version",
+        "type": "string",
+        "description": "BNK manifest version to download from FAR.",
+        "default": "2.2.1-3.2226.0-0.0.511",
+        "order": 50
       }
     ]
   },
@@ -103,6 +161,45 @@
         "aws_session_token": "${aws_session_token}",
         "aws_region": "${aws_region}",
         "eks_cluster_name": "${eks_cluster_name}"
+      }
+    },
+    {
+      "id": "bnk-prereqs",
+      "name": "BNK Prerequisites",
+      "description": "Create BNK namespaces, FAR image pull secrets, and download the BNK manifest.",
+      "module": "modules/eks-cluster-install-bnk-prereqs",
+      "version": "1.0.0",
+      "depends_on": ["cluster-register"],
+      "inputs": {
+        "cne_pull_secret": "${cne_pull_secret}",
+        "operator_namespace": "${operator_namespace}",
+        "utils_namespace": "${utils_namespace}",
+        "gateway_namespace": "${gateway_namespace}",
+        "bnk_manifest_version": "${bnk_manifest_version}",
+        "cluster_name": "${eks_cluster_name}"
+      }
+    },
+    {
+      "id": "cert-manager",
+      "name": "Cert-Manager",
+      "description": "Install Jetstack cert-manager with BNK-compatible defaults.",
+      "module": "modules/eks-cluster-install-cert-manager",
+      "version": "3.1.0",
+      "depends_on": ["bnk-prereqs"],
+      "inputs": {
+        "cluster_name": "${eks_cluster_name}",
+        "bnk_namespace": "${operator_namespace}"
+      }
+    },
+    {
+      "id": "cert-issuer",
+      "name": "BNK Cert Issuer",
+      "description": "Create the BNK-managed self-signed CA and ClusterIssuer used by FLO + OTEL certs.",
+      "module": "modules/eks-cluster-install-cert-issuer",
+      "version": "1.0.0",
+      "depends_on": ["cert-manager"],
+      "inputs": {
+        "instance_namespace": "${operator_namespace}"
       }
     }
   ]
