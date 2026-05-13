@@ -187,9 +187,11 @@
       {
         "name": "cloud_az_subnet_mappings",
         "type": "list(object({name=string,subnets=list(object({cidr=string,subnet_id=string}))}))",
-        "description": "AWS AZ → subnet mapping for the cloud-network-mapping ConfigMap. Empty list = skip.",
+        "description": "AWS AZ → subnet mapping. Auto-wired from eks-cluster-register — discovered via data.aws_subnet against the cluster's own VPC config.",
         "default": [],
-        "source": "user"
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "cloud_az_subnet_mappings"
       },
       {
         "name": "bnk_gateway_chassis",

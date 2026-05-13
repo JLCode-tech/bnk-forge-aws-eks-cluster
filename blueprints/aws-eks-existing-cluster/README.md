@@ -37,8 +37,9 @@ Current revision: `version: 0.4.0`, `maturity: preview`. The License module is t
 | `tmm_replicas` | User | No | Number of TMM replicas. Default `3`. |
 | `watch_namespaces` | User | No | Namespaces the CNE controller watches. Default `["All"]`. |
 | `network_attachments` | User | No | NAD names attached to TMM. Default `["ens7-ipvlan-l2"]`. |
-| `cloud_az_subnet_mappings` | User | **Production only** | AWS AZ → subnet mapping. Required for multi-AZ TMM placement. Empty default. |
 | `bnk_gateway_chassis` | User | **For Gateway-API traffic** | F5BnkGateway chassis config. Required if you want Gateway/HTTPRoute traffic to flow. Empty default. |
+
+> **`cloud_az_subnet_mappings` is auto-wired** from `eks-cluster-register`. The register module queries the EKS cluster's own VPC config and emits the AZ → subnet structure that `cneinstall` consumes for the cloud-network-mapping ConfigMap. Users don't see or set this — EKS already knows it.
 
 ## Module chain (depends_on graph)
 

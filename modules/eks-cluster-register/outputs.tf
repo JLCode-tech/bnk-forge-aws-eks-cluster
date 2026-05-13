@@ -43,3 +43,28 @@ output "kubeconfig" {
   value       = base64encode(local.kubeconfig)
   sensitive   = true
 }
+
+# -----------------------------------------------------------------------------
+# Network outputs — let downstream modules auto-wire AWS subnet/AZ info that
+# the EKS cluster already knows about, so users don't have to re-enter it.
+# -----------------------------------------------------------------------------
+
+output "vpc_id" {
+  description = "VPC ID the EKS cluster lives in."
+  value       = data.aws_eks_cluster.existing.vpc_config[0].vpc_id
+}
+
+output "subnet_ids" {
+  description = "All subnet IDs attached to the EKS cluster's VPC config."
+  value       = data.aws_eks_cluster.existing.vpc_config[0].subnet_ids
+}
+
+output "cloud_az_subnet_mappings" {
+  description = <<-EOT
+    AZ → subnets list, structured for direct consumption by the
+    eks-cluster-cneinstall module's cloud_az_subnet_mappings input.
+    Each entry: { name = "<az>", subnets = [{ cidr, subnet_id }, ...] }.
+    Discovered via data.aws_subnet against the EKS cluster's subnet IDs.
+  EOT
+  value       = local.az_subnet_mappings
+}

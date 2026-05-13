@@ -6,7 +6,7 @@ Apply the CNEInstance CR on AWS EKS, lay down AWS-specific supporting resources,
 
 | Step | Action | Conditional |
 |---|---|---|
-| 1 | Render + apply the `cloud-network-mapping` ConfigMap with AWS AZ → subnet mapping. The CNE controller reads it for multi-AZ TMM placement. | Skipped if `cloud_az_subnet_mappings` is empty. CNE controller will fail to compute placement — set this in production. |
+| 1 | Render + apply the `cloud-network-mapping` ConfigMap with AWS AZ → subnet mapping. The CNE controller reads it for multi-AZ TMM placement. The AZ/subnet list is **auto-wired** from `eks-cluster-register.cloud_az_subnet_mappings` — discovered from the EKS cluster's own VPC config, so users don't have to re-enter what EKS already knows. | Skipped only if the EKS cluster returns no subnets (shouldn't happen in practice). |
 | 2 | Render + apply the `CNEInstance` CR with AWS-tuned production defaults. FLO observes the CR and rolls out CWC, DSSM, Observer, OTEL, RabbitMQ, TMM, and the IPAM operator. | Always |
 | 3 | Render + apply the `F5BnkGateway` chassis CR (required on AWS/EKS for Gateway-API translation — see [bnk-forge-modules PR #58](https://github.com/JLCode-tech/bnk-forge-modules/pull/58) for the discovery trail). | Skipped if `bnk_gateway_chassis.default_listener_networks` is empty. |
 | 4 | Create IAM policy (`<cluster>-allow-ec2-vip`) + IRSA role (`<cluster>-cne-controller-vip`) with OIDC trust scoped to the CNE controller's SA. | Always |
@@ -45,8 +45,9 @@ Apply the CNEInstance CR on AWS EKS, lay down AWS-specific supporting resources,
 | `watch_namespaces` | `["All"]` | Which namespaces the controller watches. |
 | `network_attachments` | `["ens7-ipvlan-l2"]` | NAD names attached to TMM. Matches the future `network-setup` module's default NAD. |
 | `storage_class_name` | `gp3` | EKS gp3 is the AWS default. |
-| `cloud_az_subnet_mappings` | `[]` | **Set this for production.** AWS AZ → subnet mapping for multi-AZ placement. |
 | `bnk_gateway_chassis` | `{ default_listener_networks = [] }` | F5BnkGateway chassis config. Set this if you want Gateway/HTTPRoute traffic to flow. |
+
+`cloud_az_subnet_mappings` is no longer a user-facing input — it's auto-wired from `eks-cluster-register`. The register module queries the cluster's VPC config via `data.aws_eks_cluster.vpc_config.subnet_ids` + `data.aws_subnet` to discover AZs and CIDRs, and exposes the structured mapping that this module consumes directly.
 
 ## IRSA — what gets granted
 
@@ -69,7 +70,7 @@ Auto-wired from upstream modules in the blueprint chain:
 
 | Input | Source |
 |---|---|
-| `eks_cluster_name`, `cluster_oidc_issuer_url` | `eks-cluster-register` |
+| `eks_cluster_name`, `cluster_oidc_issuer_url`, `cloud_az_subnet_mappings` | `eks-cluster-register` |
 | `operator_namespace`, `manifest_version`, `far_secret_name` | `eks-cluster-install-bnk-prereqs` |
 | `cluster_issuer_name` | `eks-cluster-install-cert-issuer` |
 | `flo_ready`, `crds_installed` | `eks-cluster-install-flo` (gates) |
