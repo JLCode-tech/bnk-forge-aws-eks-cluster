@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "EKS Cluster CNEInstall",
+    "path": "modules/eks-cluster-cneinstall",
+    "version": "1.0.0",
+    "category": "bnk",
+    "description": "Apply the CNEInstance CR on AWS EKS, lay down the cloud-network-mapping ConfigMap and (optionally) the F5BnkGateway chassis CR, and wire AWS IRSA for the CNE controller (IAM role + OIDC trust + SA annotation + rollout-restart).",
+    "provider": "aws",
+    "supported_platforms": ["aws_eks"],
+    "tags": ["aws", "eks", "bnk", "cneinstance", "irsa", "f5"]
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "credentials": {
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "cloud",
+        "description": "AWS credential template (any auth method). Forge resolves to access_key_id at deploy time."
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "cloud",
+        "description": "AWS credential template (any auth method). Forge resolves to secret_access_key at deploy time."
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "cloud",
+        "description": "AWS credential template (any auth method). Populated for STS / SSO / assumed-role; empty for static keys."
+      }
+    ]
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "modules/eks-cluster-register",
+        "reason": "Provides eks_cluster_name and cluster_oidc_issuer_url for IRSA trust binding"
+      },
+      {
+        "module": "modules/eks-cluster-install-bnk-prereqs",
+        "reason": "Provides operator_namespace, manifest_version, and far_secret_name"
+      },
+      {
+        "module": "modules/eks-cluster-install-cert-issuer",
+        "reason": "Provides cluster_issuer_name referenced by CNEInstance.spec.certificate"
+      },
+      {
+        "module": "modules/eks-cluster-install-flo",
+        "reason": "FLO must be running and BNK CRDs registered before applying CNEInstance"
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "string",
+        "description": "AWS access key ID. Resolved from credential template (any auth method).",
+        "source": "user",
+        "sensitive": true
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "string",
+        "description": "AWS secret access key. Resolved from credential template.",
+        "source": "user",
+        "sensitive": true
+      },
+      {
+        "name": "aws_region",
+        "type": "string",
+        "description": "AWS region (used for the AWS provider client).",
+        "source": "user"
+      },
+      {
+        "name": "eks_cluster_name",
+        "type": "string",
+        "description": "EKS cluster name. Used for IAM resource naming.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "cluster_name"
+      },
+      {
+        "name": "cluster_oidc_issuer_url",
+        "type": "string",
+        "description": "OIDC issuer URL of the EKS cluster.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "cluster_oidc_issuer_url"
+      },
+      {
+        "name": "manifest_version",
+        "type": "string",
+        "description": "BNK manifest version (referenced in the CNEInstance CR).",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-bnk-prereqs",
+        "from_output": "manifest_version"
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "string",
+        "description": "AWS session token (STS / SSO / assumed-role). Empty for static keys.",
+        "default": "",
+        "source": "user",
+        "sensitive": true
+      },
+      {
+        "name": "operator_namespace",
+        "type": "string",
+        "description": "Namespace where CNEInstance CR is created (also where FLO + CNE controller live).",
+        "default": "f5-operator",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-bnk-prereqs",
+        "from_output": "operator_namespace"
+      },
+      {
+        "name": "far_secret_name",
+        "type": "string",
+        "description": "FAR image pull secret name.",
+        "default": "far-secret",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-bnk-prereqs",
+        "from_output": "far_secret_name"
+      },
+      {
+        "name": "cluster_issuer_name",
+        "type": "string",
+        "description": "ClusterIssuer name referenced by CNEInstance.spec.certificate.",
+        "default": "bnk-ca-cluster-issuer",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-cert-issuer",
+        "from_output": "cluster_issuer_name"
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Dependency gate from FLO module — must be true before applying CNEInstance.",
+        "default": true,
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-flo",
+        "from_output": "flo_ready"
+      },
+      {
+        "name": "crds_installed",
+        "type": "boolean",
+        "description": "Dependency gate from FLO — BNK CRDs must be registered before applying CNEInstance.",
+        "default": true,
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-flo",
+        "from_output": "crds_installed"
+      },
+      {
+        "name": "instance_name",
+        "type": "string",
+        "description": "Name of the CNEInstance CR.",
+        "default": "default-f5-cne-controller",
+        "source": "user"
+      },
+      {
+        "name": "deployment_size",
+        "type": "string",
+        "description": "CNEInstance deploymentSize. One of: Small, Medium, Large.",
+        "default": "Small",
+        "source": "user"
+      },
+      {
+        "name": "tmm_replicas",
+        "type": "number",
+        "description": "Number of TMM replicas. Typically one per AZ for multi-AZ setups.",
+        "default": 3,
+        "source": "user"
+      },
+      {
+        "name": "watch_namespaces",
+        "type": "list(string)",
+        "description": "Which namespaces the CNE controller watches for Gateway/HTTPRoute CRs. [\"All\"] = everything.",
+        "default": ["All"],
+        "source": "user"
+      },
+      {
+        "name": "network_attachments",
+        "type": "list(string)",
+        "description": "NAD names attached to TMM. Defaults to the ipvlan NAD that the future network-setup module will provide.",
+        "default": ["ens7-ipvlan-l2"],
+        "source": "user"
+      },
+      {
+        "name": "storage_class_name",
+        "type": "string",
+        "description": "StorageClass for CNEInstance persistent state.",
+        "default": "gp3",
+        "source": "user"
+      },
+      {
+        "name": "cloud_az_subnet_mappings",
+        "type": "list(object({name=string,subnets=list(object({cidr=string,subnet_id=string}))}))",
+        "description": "AWS AZ → subnet mapping for the cloud-network-mapping ConfigMap (required for AWS multi-AZ TMM placement). Empty list = skip the ConfigMap (CNE controller will likely misbehave — set this for production).",
+        "default": [],
+        "source": "user"
+      },
+      {
+        "name": "bnk_gateway_chassis",
+        "type": "object({name=optional(string),default_listener_networks=list(object({name=string,start_address=string,end_address=string}))})",
+        "description": "F5BnkGateway chassis CR config — required for Gateway-API translation on AWS/EKS. Empty default_listener_networks list = skip CR creation.",
+        "default": {
+          "default_listener_networks": []
+        },
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "cneinstance_namespace",
+        "type": "string",
+        "description": "Namespace where the CNEInstance CR lives."
+      },
+      {
+        "name": "cne_controller_role_arn",
+        "type": "string",
+        "description": "IAM role ARN assumed by the CNE controller via IRSA."
+      },
+      {
+        "name": "cloud_network_mapping_applied",
+        "type": "boolean",
+        "description": "True if the cloud-network-mapping ConfigMap was applied."
+      },
+      {
+        "name": "bnk_gateway_chassis_applied",
+        "type": "boolean",
+        "description": "True if the F5BnkGateway chassis CR was applied."
+      },
+      {
+        "name": "cneinstance_ready",
+        "type": "boolean",
+        "description": "Gate output — true once IRSA wiring (annotate + rollout-restart) is complete."
+      }
+    ]
+  }
+}

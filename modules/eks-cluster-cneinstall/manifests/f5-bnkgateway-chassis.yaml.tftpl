@@ -1,0 +1,16 @@
+apiVersion: k8s.f5net.com/v1
+kind: F5BnkGateway
+metadata:
+  name: ${chassis_name}
+  namespace: ${instance_namespace}
+  labels:
+    app.kubernetes.io/managed-by: bnk-forge
+    app.kubernetes.io/component: chassis-config
+spec:
+  ingressConfig:
+    defaultListenerNetworks:
+%{ for net in default_listener_networks ~}
+    - name: "${net.name}"
+      startAddress: "${net.start_address}"
+      endAddress: "${net.end_address}"
+%{ endfor ~}

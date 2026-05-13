@@ -1,0 +1,76 @@
+apiVersion: k8s.f5.com/v1
+kind: CNEInstance
+metadata:
+  name: ${instance_name}
+  namespace: ${instance_namespace}
+  labels:
+    app.kubernetes.io/name: ${instance_name}
+    app.kubernetes.io/component: cne-instance
+    app.kubernetes.io/managed-by: bnk-forge
+    app.kubernetes.io/version: "${manifest_version}"
+spec:
+  product:
+    gatewayAPI: true
+    type: BNK
+  manifestVersion: "${manifest_version}"
+  wholeCluster: false
+  telemetry:
+    loggingSubsystem:
+      enabled: true
+    metricSubsystem:
+      enabled: true
+  certificate:
+    clusterIssuer: ${cluster_issuer_name}
+  deploymentSize: ${deployment_size}
+  storageClassName: ${storage_class_name}
+  registry:
+    uri: repo.f5.com
+    imagePullSecrets:
+      - name: ${far_secret_name}
+    imagePullPolicy: Always
+  networkAttachments:
+%{ for nad in network_attachments ~}
+    - ${nad}
+%{ endfor ~}
+  dynamicRouting:
+    enabled: true
+  firewallACL:
+    enabled: false
+  pseudoCNI:
+    enabled: true
+  coreCollection:
+    enabled: true
+  watchNamespaces:
+%{ for ns in watch_namespaces ~}
+    - "${ns}"
+%{ endfor ~}
+  tmmReplicas: ${tmm_replicas}
+  advanced:
+    coremon:
+      hostPath: true
+    envDiscovery:
+      enabled: true
+      stopOnFail: true
+      runAfterSuccess: true
+    cneController:
+      env:
+        - name: TMM_DEFAULT_MTU
+          value: "9000"
+        - name: CLOUD_ENV
+          value: "true"
+        - name: CLOUD_PROVIDER
+          value: "aws"
+        - name: CLOUD_NETWORK_CONFIGMAP
+          value: "cloud-network-mapping"
+    demoMode:
+      enabled: false
+    maintenanceMode:
+      enabled: false
+    tmm:
+      env:
+        - name: TMM_DEFAULT_MTU
+          value: "9000"
+        - name: PAL_CPU_SET
+          value: "0,2"
+        - name: TMM_MAPRES_ADDL_VETHS_ON_DP
+          value: "TRUE"

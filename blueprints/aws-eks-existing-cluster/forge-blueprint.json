@@ -2,9 +2,9 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-existing-cluster",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "name": "AWS EKS Existing Cluster",
-    "description": "Adopt an existing AWS EKS cluster and lay down the BNK control plane: namespaces + FAR pull secrets + manifest, cert-manager, BNK cert issuer, and F5 Lifecycle Operator (FLO). CNEInstance + License steps land in subsequent revisions."
+    "description": "Adopt an existing AWS EKS cluster and lay down the BNK control plane: namespaces + FAR pull secrets + manifest, cert-manager, BNK cert issuer, F5 Lifecycle Operator (FLO), and the CNEInstance (with AWS IRSA, cloud-network-mapping ConfigMap, and optional F5BnkGateway chassis). License step lands in the next revision."
   },
   "bnk_version": "2.2",
   "compatibility": {
@@ -33,14 +33,16 @@
   "estimated_cost": "AWS usage-based",
   "difficulty": "intermediate",
   "maturity": "preview",
-  "tags": ["aws", "eks", "kubernetes", "cluster", "register", "cert-manager", "bnk-prereqs", "flo"],
+  "tags": ["aws", "eks", "kubernetes", "cluster", "register", "cert-manager", "bnk-prereqs", "flo", "cneinstance", "irsa"],
   "outcomes": [
     "An existing AWS EKS cluster is referenced by name and adopted into BNK Forge",
     "BNK namespaces, FAR pull secrets, and component manifest are deployed",
     "Jetstack cert-manager is installed with BNK-compatible defaults",
     "The BNK CA-backed ClusterIssuer is created and ready for FLO + OTEL certs",
     "F5 Lifecycle Operator (FLO) is installed with AWS-tuned defaults; BNK CRDs are registered",
-    "A kubeconfig with a short-lived STS token is emitted for downstream modules"
+    "CNEInstance is applied with AWS-specific cneController env vars; FLO rolls out CWC, DSSM, OTEL, RabbitMQ, TMM, IPAM operator",
+    "AWS IRSA is wired for the CNE controller — IAM role + OIDC trust + SA annotation",
+    "(Optional) cloud-network-mapping ConfigMap and F5BnkGateway chassis CR are applied when their inputs are provided"
   ],
   "prerequisites": [
     {
@@ -167,6 +169,48 @@
         "description": "FLO containerPlatform value. AWS-tuned default; override only if you need to test against a different platform path in the FLO chart.",
         "default": "AWS",
         "order": 61
+      },
+      {
+        "name": "deployment_size",
+        "type": "string",
+        "description": "CNEInstance deploymentSize: Small / Medium / Large.",
+        "default": "Small",
+        "order": 70
+      },
+      {
+        "name": "tmm_replicas",
+        "type": "number",
+        "description": "Number of TMM replicas. Typically one per AZ for multi-AZ setups.",
+        "default": 3,
+        "order": 71
+      },
+      {
+        "name": "watch_namespaces",
+        "type": "list(string)",
+        "description": "Which namespaces the CNE controller watches for Gateway/HTTPRoute CRs. ['All'] watches everything.",
+        "default": ["All"],
+        "order": 72
+      },
+      {
+        "name": "network_attachments",
+        "type": "list(string)",
+        "description": "NetworkAttachmentDefinition names attached to TMM.",
+        "default": ["ens7-ipvlan-l2"],
+        "order": 73
+      },
+      {
+        "name": "cloud_az_subnet_mappings",
+        "type": "list(object)",
+        "description": "AWS AZ → subnet mapping for the cloud-network-mapping ConfigMap. Required for multi-AZ TMM placement. Schema: [{name='us-east-1a', subnets=[{cidr='192.168.1.0/24', subnet_id='subnet-aaa'}]}]. Empty list = skip the ConfigMap.",
+        "default": [],
+        "order": 80
+      },
+      {
+        "name": "bnk_gateway_chassis",
+        "type": "object",
+        "description": "F5BnkGateway chassis config — required on AWS/EKS for Gateway-API translation. Schema: {name='bnk-gateway-chassis', default_listener_networks=[{name='public', start_address='10.0.0.1', end_address='10.0.0.254'}]}. Empty default_listener_networks list = skip CR creation.",
+        "default": { "default_listener_networks": [] },
+        "order": 81
       }
     ]
   },
@@ -238,6 +282,26 @@
         "jwt_token": "${jwt_token}",
         "license_mode": "${license_mode}",
         "container_platform": "${container_platform}"
+      }
+    },
+    {
+      "id": "cneinstall",
+      "name": "CNEInstance + IRSA",
+      "description": "Apply the CNEInstance CR with AWS production defaults, the cloud-network-mapping ConfigMap, the F5BnkGateway chassis CR (when configured), and wire AWS IRSA for the CNE controller (IAM role + SA annotation + rollout-restart).",
+      "module": "modules/eks-cluster-cneinstall",
+      "version": "1.0.0",
+      "depends_on": ["flo"],
+      "inputs": {
+        "aws_access_key_id": "${aws_access_key_id}",
+        "aws_secret_access_key": "${aws_secret_access_key}",
+        "aws_session_token": "${aws_session_token}",
+        "aws_region": "${aws_region}",
+        "deployment_size": "${deployment_size}",
+        "tmm_replicas": "${tmm_replicas}",
+        "watch_namespaces": "${watch_namespaces}",
+        "network_attachments": "${network_attachments}",
+        "cloud_az_subnet_mappings": "${cloud_az_subnet_mappings}",
+        "bnk_gateway_chassis": "${bnk_gateway_chassis}"
       }
     }
   ]

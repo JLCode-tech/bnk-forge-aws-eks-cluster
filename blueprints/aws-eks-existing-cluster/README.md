@@ -11,10 +11,10 @@ Adopt an existing AWS EKS cluster into BNK Forge and lay down the shared BNK k8s
 | 3 | `eks-cluster-install-cert-manager` — install Jetstack cert-manager | Implemented (vendored) |
 | 4 | `eks-cluster-install-cert-issuer` — BNK CA + ClusterIssuer | Implemented (vendored) |
 | 5 | `eks-cluster-install-flo` — install F5 Lifecycle Operator via Helm (AWS-tuned values) | Implemented |
-| 6 | `eks-cluster-cneinstall` — deploy a `CNEInstance` CR with AWS cneController env vars | Not yet implemented |
+| 6 | `eks-cluster-cneinstall` — CNEInstance CR + cloud-network-mapping + F5BnkGateway chassis + AWS IRSA | Implemented |
 | 7 | `eks-cluster-license` — apply the BNK License CR | Not yet implemented |
 
-Current revision: `version: 0.3.0`, `maturity: preview`. Subsequent PRs add CNEInstance and License — at which point this blueprint will deploy BNK end-to-end onto an existing EKS cluster.
+Current revision: `version: 0.4.0`, `maturity: preview`. The License module is the last remaining step — once that lands this blueprint will deploy BNK end-to-end onto an existing EKS cluster.
 
 ## Inputs (current revision)
 
@@ -33,6 +33,12 @@ Current revision: `version: 0.3.0`, `maturity: preview`. Subsequent PRs add CNEI
 | `bnk_manifest_version` | User | No | BNK manifest version to download. Default `2.2.1-3.2226.0-0.0.511`. |
 | `license_mode` | User | No | FLO license mode: `connected` (default) or `f5licenseproxy`. |
 | `container_platform` | User | No | FLO containerPlatform. Default `AWS`. |
+| `deployment_size` | User | No | CNEInstance size: Small/Medium/Large. Default `Small`. |
+| `tmm_replicas` | User | No | Number of TMM replicas. Default `3`. |
+| `watch_namespaces` | User | No | Namespaces the CNE controller watches. Default `["All"]`. |
+| `network_attachments` | User | No | NAD names attached to TMM. Default `["ens7-ipvlan-l2"]`. |
+| `cloud_az_subnet_mappings` | User | **Production only** | AWS AZ → subnet mapping. Required for multi-AZ TMM placement. Empty default. |
+| `bnk_gateway_chassis` | User | **For Gateway-API traffic** | F5BnkGateway chassis config. Required if you want Gateway/HTTPRoute traffic to flow. Empty default. |
 
 ## Module chain (depends_on graph)
 
@@ -42,6 +48,7 @@ cluster-register
             └─→ cert-manager
                     └─→ cert-issuer
                             └─→ flo
+                                    └─→ cneinstall
 ```
 
 ## What you get
@@ -54,7 +61,10 @@ After apply:
 - Jetstack cert-manager is installed and healthy.
 - The BNK CA + CA-backed ClusterIssuer is ready for use by FLO and OTEL certificate flows.
 - F5 Lifecycle Operator is installed with AWS-tuned defaults; BNK CRDs (`F5SPKVlan`, `CNEInstance`, `BNKNetPolicy`, etc.) are registered with the cluster API.
+- CNEInstance CR is applied with AWS production defaults — FLO rolls out CWC, DSSM, OTEL, RabbitMQ, TMM, and the IPAM operator.
+- AWS IRSA is wired for the CNE controller: IAM role with EC2 VIP permissions, SA annotated, controller restarted.
+- (When configured) cloud-network-mapping ConfigMap and F5BnkGateway chassis CR are applied so the CNE controller can compute multi-AZ TMM placement and Gateway/HTTPRoute translation works.
 
 ## What's still required to deploy BNK end-to-end
 
-Until CNEInstance and License modules ship in this repo, run those steps manually after this blueprint applies. Or wait for the next PR.
+Until the License module ships in this repo, run that step manually after this blueprint applies. Or wait for the next PR.
