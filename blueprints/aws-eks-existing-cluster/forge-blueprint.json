@@ -2,9 +2,9 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-existing-cluster",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "name": "AWS EKS Existing Cluster",
-    "description": "Adopt an existing AWS EKS cluster and lay down the shared BNK k8s prerequisites (namespaces + FAR pull secrets + manifest), cert-manager, and the BNK cert issuer. FLO, CNEInstance, and License steps land in subsequent revisions."
+    "description": "Adopt an existing AWS EKS cluster and lay down the BNK control plane: namespaces + FAR pull secrets + manifest, cert-manager, BNK cert issuer, and F5 Lifecycle Operator (FLO). CNEInstance + License steps land in subsequent revisions."
   },
   "bnk_version": "2.2",
   "compatibility": {
@@ -33,12 +33,13 @@
   "estimated_cost": "AWS usage-based",
   "difficulty": "intermediate",
   "maturity": "preview",
-  "tags": ["aws", "eks", "kubernetes", "cluster", "register", "cert-manager", "bnk-prereqs"],
+  "tags": ["aws", "eks", "kubernetes", "cluster", "register", "cert-manager", "bnk-prereqs", "flo"],
   "outcomes": [
     "An existing AWS EKS cluster is referenced by name and adopted into BNK Forge",
     "BNK namespaces, FAR pull secrets, and component manifest are deployed",
     "Jetstack cert-manager is installed with BNK-compatible defaults",
     "The BNK CA-backed ClusterIssuer is created and ready for FLO + OTEL certs",
+    "F5 Lifecycle Operator (FLO) is installed with AWS-tuned defaults; BNK CRDs are registered",
     "A kubeconfig with a short-lived STS token is emitted for downstream modules"
   ],
   "prerequisites": [
@@ -104,6 +105,14 @@
         "sensitive": true,
         "source": "user",
         "order": 30
+      },
+      {
+        "name": "jwt_token",
+        "type": "string",
+        "description": "F5 BNK License JWT. Bind to a stored project secret in the deploy form.",
+        "sensitive": true,
+        "source": "user",
+        "order": 31
       }
     ],
     "optional": [
@@ -144,6 +153,20 @@
         "description": "BNK manifest version to download from FAR.",
         "default": "2.2.1-3.2226.0-0.0.511",
         "order": 50
+      },
+      {
+        "name": "license_mode",
+        "type": "string",
+        "description": "FLO license mode: 'connected' (talks to F5 license server) or 'f5licenseproxy' (talks to a local F5 License Proxy).",
+        "default": "connected",
+        "order": 60
+      },
+      {
+        "name": "container_platform",
+        "type": "string",
+        "description": "FLO containerPlatform value. AWS-tuned default; override only if you need to test against a different platform path in the FLO chart.",
+        "default": "AWS",
+        "order": 61
       }
     ]
   },
@@ -200,6 +223,21 @@
       "depends_on": ["cert-manager"],
       "inputs": {
         "instance_namespace": "${operator_namespace}"
+      }
+    },
+    {
+      "id": "flo",
+      "name": "F5 Lifecycle Operator",
+      "description": "Install FLO via Helm with AWS-tuned defaults (containerPlatform=AWS, fluentbit sidecar disabled, IPAM operator in default ns). Registers BNK CRDs.",
+      "module": "modules/eks-cluster-install-flo",
+      "version": "2.0.0",
+      "depends_on": ["cert-issuer"],
+      "inputs": {
+        "flo_namespace": "${operator_namespace}",
+        "cluster_name": "${eks_cluster_name}",
+        "jwt_token": "${jwt_token}",
+        "license_mode": "${license_mode}",
+        "container_platform": "${container_platform}"
       }
     }
   ]

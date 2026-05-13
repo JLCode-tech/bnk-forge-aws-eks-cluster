@@ -20,7 +20,7 @@ After apply succeeds, Forge auto-registers your EKS cluster in its Kubernetes in
 
 | Blueprint | When to use | Status |
 |---|---|---|
-| [`blueprints/aws-eks-existing-cluster`](./blueprints/aws-eks-existing-cluster) | You already have an EKS cluster (provisioned by Terraform, the AWS console, eksctl, etc.) and want Forge to adopt it and lay down the BNK stack on top. | Implemented through cert-issuer; FLO + CNEInstance + License pending |
+| [`blueprints/aws-eks-existing-cluster`](./blueprints/aws-eks-existing-cluster) | You already have an EKS cluster (provisioned by Terraform, the AWS console, eksctl, etc.) and want Forge to adopt it and lay down the BNK stack on top. | Implemented through FLO; CNEInstance + License pending |
 | `blueprints/aws-eks-cluster-create` | You want Forge to provision a new EKS cluster end-to-end (VPC, subnets, node groups, BNK stack). | Not yet implemented |
 
 ## Modules
@@ -33,8 +33,8 @@ Implementation status across the AWS-specific deployment chain:
 | [`modules/eks-cluster-install-bnk-prereqs`](./modules/eks-cluster-install-bnk-prereqs) | Namespaces, FAR pull secrets, BNK manifest download. | Implemented (vendored from `bnk-forge-catalog-shared`) |
 | [`modules/eks-cluster-install-cert-manager`](./modules/eks-cluster-install-cert-manager) | Jetstack cert-manager install. | Implemented (vendored) |
 | [`modules/eks-cluster-install-cert-issuer`](./modules/eks-cluster-install-cert-issuer) | BNK self-signed CA + ClusterIssuer. | Implemented (vendored) |
-| `modules/eks-cluster-install-flo` | F5 Lifecycle Operator install with AWS IRSA for the FLO controller and BIG-IP CIS service account. | Not yet implemented |
-| `modules/eks-cluster-cneinstall` | CNEInstance CR with AWS-specific `F5BnkGateway` chassis logic and ENA/SR-IOV chassis config. | Not yet implemented |
+| [`modules/eks-cluster-install-flo`](./modules/eks-cluster-install-flo) | F5 Lifecycle Operator install via Helm with AWS-tuned values (containerPlatform=AWS, fluentbit disabled, IPAM operator in default ns). Registers BNK CRDs. | Implemented |
+| `modules/eks-cluster-cneinstall` | CNEInstance CR with AWS-specific cneController env (`CLOUD_PROVIDER=aws`, `CLOUD_NETWORK_CONFIGMAP`, `TMM_DEFAULT_MTU`) and `F5BnkGateway` chassis logic. | Not yet implemented |
 | `modules/eks-cluster-license` | BNK License CR. | Not yet implemented |
 | `modules/eks-cluster-create` | VPC + subnets + EKS cluster + node groups (provisioning, alternate to register). | Not yet implemented |
 
