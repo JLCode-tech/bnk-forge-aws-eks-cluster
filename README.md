@@ -36,6 +36,7 @@ Implementation status across the AWS-specific deployment chain:
 | [`modules/eks-cluster-install-flo`](./modules/eks-cluster-install-flo) | F5 Lifecycle Operator install via Helm with AWS-tuned values (containerPlatform=AWS, fluentbit disabled, IPAM operator in default ns). Registers BNK CRDs and carries the BNK license block — license activation happens here, no separate License CR. | Implemented |
 | [`modules/eks-cluster-cneinstall`](./modules/eks-cluster-cneinstall) | CNEInstance CR with AWS production defaults (CLOUD_PROVIDER=aws, TMM_DEFAULT_MTU=9000, PAL_CPU_SET=0,2), cloud-network-mapping ConfigMap, BNKGateway CR (kind: F5BnkGateway) for VIP IPAM, and IRSA for the CNE controller. | Implemented |
 | [`modules/eks-cluster-create`](./modules/eks-cluster-create) | VPC + subnets + EKS cluster + managed node group (alternate to register). Wraps `terraform-aws-modules/vpc/aws` and `terraform-aws-modules/eks/aws` so production hardening (IMDSv2, EBS encryption, OIDC, control-plane logging) comes from a widely-audited community baseline. | Implemented (beta) |
+| [`modules/eks-cluster-hp-nodes`](./modules/eks-cluster-hp-nodes) | **Optional** add-on for both blueprints. Dedicated high-performance EKS managed node group for TMM data-plane pods: per-AZ TMM subnets (tagged `f5-bnk-role=tmm-external`), m5n/c5n nodes with IMDSv2 + EBS encryption + secondary-ENI bootstrap user-data, `app=f5-tmm` label. Works for both greenfield (cluster-create) and brownfield (cluster-register). | Implemented (alpha) |
 
 ## AWS credentials
 
