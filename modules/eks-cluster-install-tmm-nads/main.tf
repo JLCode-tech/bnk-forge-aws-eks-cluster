@@ -1,15 +1,15 @@
 # =============================================================================
 # eks-cluster-install-tmm-nads
 # =============================================================================
-# Installs Multus CNI and creates the two NetworkAttachmentDefinitions the HP
-# variant blueprints reference in their CNEInstance CRs:
+# Creates the two AWS-specific NetworkAttachmentDefinitions the HP variant
+# blueprints reference in their CNEInstance CRs:
 #   - ens7-ipvlan-l2 → external data-plane interface on the hp-nodes ens7 ENI
 #   - ens8-ipvlan-l2 → internal data-plane interface on the hp-nodes ens8 ENI
 #
-# Replaces the manual "apply the YAMLs from the F5 install guide" prerequisite
-# the -with-hp-nodes blueprints previously documented. AWS EKS does not ship
-# Multus by default; without it the TMM secondary network attachments are
-# rejected by the kubelet.
+# The Multus CNI install is done by the cloud-agnostic eks-cluster-install-
+# multus module (vendored from bnk-forge-catalog-shared); this module
+# depends on it via var.multus_ready and only handles the AWS-specific
+# bits: tag-discovery of the TMM subnets + the NAD CR applies themselves.
 #
 # The CNI 'static' IPAM type requires at least one address. We derive the
 # placeholder from the first f5-bnk-role-tagged subnet discovered in the
@@ -17,12 +17,9 @@
 # subnet TMM's secondary ENI actually lives on.
 #
 # Sequence:
-#   1. Apply the Multus daemonset manifest from upstream (or vendored mirror).
-#   2. Wait for the multus-cni-config ConfigMap + multus-daemonset pods to be
-#      ready (so the NetworkAttachmentDefinition CRD exists before we apply
-#      the CRs).
-#   3. Apply the external NAD (ens7-ipvlan-l2 by default).
-#   4. Apply the internal NAD (ens8-ipvlan-l2 by default).
+#   1. Discover f5-bnk-role=tmm-external and tmm-internal subnets in vpc_id.
+#   2. Apply the external NAD (ens7-ipvlan-l2 by default).
+#   3. Apply the internal NAD (ens8-ipvlan-l2 by default).
 
 provider "aws" {
   region     = var.aws_region
@@ -80,8 +77,6 @@ resource "local_sensitive_file" "kubeconfig" {
 
 locals {
   kubectl = "kubectl --kubeconfig ${local_sensitive_file.kubeconfig.filename}"
-
-  multus_url = var.multus_manifest_url != "" ? var.multus_manifest_url : "https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/${var.multus_version}/deployments/multus-daemonset.yml"
 
   # Sorted lists of discovered subnet CIDRs. Sort = deterministic pick when
   # multiple AZs are tagged; we always take index [0] for the NAD placeholder.
@@ -143,50 +138,6 @@ locals {
 }
 
 # =============================================================================
-# Multus install — fetches and applies the upstream daemonset manifest
-# =============================================================================
-
-resource "null_resource" "multus_install" {
-  count = var.install_multus ? 1 : 0
-
-  triggers = {
-    multus_url      = local.multus_url
-    kubeconfig_file = local_sensitive_file.kubeconfig.filename
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["bash", "-c"]
-    command     = <<-EOT
-      set -euo pipefail
-      echo "[tmm-nads] applying multus from ${local.multus_url}"
-      ${local.kubectl} apply -f "${local.multus_url}"
-
-      # Wait for the CRD to be Established so the NAD applies below see it.
-      ${local.kubectl} wait --for=condition=Established \
-        --timeout=120s \
-        crd/network-attachment-definitions.k8s.cni.cncf.io
-
-      # Wait for the multus daemonset to roll out so the CNI binary is on every
-      # node. Without this the first pods that need a secondary network can
-      # fail to schedule with "no CNI configuration".
-      ${local.kubectl} -n kube-system rollout status \
-        ds/kube-multus-ds \
-        --timeout=180s
-    EOT
-  }
-
-  provisioner "local-exec" {
-    when        = destroy
-    interpreter = ["bash", "-c"]
-    on_failure  = continue
-    command     = <<-EOT
-      echo "[tmm-nads] removing multus (delete -f ${self.triggers.multus_url})"
-      kubectl --kubeconfig ${self.triggers.kubeconfig_file} delete -f "${self.triggers.multus_url}" --ignore-not-found || true
-    EOT
-  }
-}
-
-# =============================================================================
 # External NAD — TMM client-facing (ens7-ipvlan-l2)
 # =============================================================================
 
@@ -216,7 +167,15 @@ MANIFEST
     command     = "kubectl --kubeconfig ${self.triggers.kubeconfig_file} -n ${self.triggers.nad_namespace} delete net-attach-def ${self.triggers.nad_name} --ignore-not-found || true"
   }
 
-  depends_on = [null_resource.multus_install]
+  # Gate on the upstream install-multus module's multus_ready output. Forge
+  # wires this via the pack manifest; explicit precondition guarantees a
+  # plan-time failure if the wiring is dropped.
+  lifecycle {
+    precondition {
+      condition     = var.multus_ready
+      error_message = "Multus must be installed before NAD CRs are applied. Wire install-multus.multus_ready into var.multus_ready in the blueprint."
+    }
+  }
 }
 
 # =============================================================================
@@ -249,5 +208,13 @@ MANIFEST
     command     = "kubectl --kubeconfig ${self.triggers.kubeconfig_file} -n ${self.triggers.nad_namespace} delete net-attach-def ${self.triggers.nad_name} --ignore-not-found || true"
   }
 
-  depends_on = [null_resource.multus_install]
+  # Gate on the upstream install-multus module's multus_ready output. Forge
+  # wires this via the pack manifest; explicit precondition guarantees a
+  # plan-time failure if the wiring is dropped.
+  lifecycle {
+    precondition {
+      condition     = var.multus_ready
+      error_message = "Multus must be installed before NAD CRs are applied. Wire install-multus.multus_ready into var.multus_ready in the blueprint."
+    }
+  }
 }

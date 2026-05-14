@@ -3,9 +3,9 @@
   "module": {
     "name": "aws_eks_cluster_install_tmm_nads",
     "path": "modules/eks-cluster-install-tmm-nads",
-    "version": "0.2.0-alpha",
+    "version": "0.3.0-alpha",
     "category": "bnk",
-    "description": "Install Multus CNI and the two NetworkAttachmentDefinitions (ens7-ipvlan-l2 + ens8-ipvlan-l2) TMM needs for its data-plane interfaces. AWS EKS does not ship Multus by default; without this module a -with-hp-nodes deploy would need the F5 install guide's NAD YAMLs applied manually. Replaces that manual prerequisite. Designed to run after eks-cluster-hp-nodes and before eks-cluster-cneinstall in the variant blueprints.",
+    "description": "Creates the two AWS-specific NetworkAttachmentDefinitions (ens7-ipvlan-l2 external, ens8-ipvlan-l2 internal) TMM uses on its data-plane secondary ENIs. Discovers the matching f5-bnk-role-tagged subnets at apply time to derive each NAD's static IPAM placeholder. Depends on eks-cluster-install-multus (cloud-agnostic, vendored from bnk-forge-catalog-shared) for the actual Multus CNI install. Runs between eks-cluster-install-multus and eks-cluster-cneinstall in the -with-hp-nodes variant blueprints.",
     "provider": "aws",
     "supported_platforms": ["aws_eks"],
     "tags": ["aws", "eks", "kubernetes", "multus", "cni", "network-attachment-definition", "tmm"],
@@ -31,17 +31,21 @@
     "required": [
       {
         "module": "modules/eks-cluster-register",
-        "reason": "Provides the kubeconfig context for kubectl applies. Auto-wired via Forge's local.forge_kubeconfig injection."
+        "reason": "Provides the kubeconfig context for kubectl applies and the vpc_id used to scope tag-discovery. Auto-wired via Forge's local.forge_kubeconfig injection + vpc_id from_module wiring."
+      },
+      {
+        "module": "modules/eks-cluster-install-multus",
+        "reason": "Must run first — Multus must be installed and the NetworkAttachmentDefinition CRD Established before this module applies NAD CRs. multus_ready gate auto-wires from this module's output."
       }
     ],
     "optional": [
       {
         "module": "modules/eks-cluster-create",
-        "reason": "Alternative upstream — emits the same kubeconfig output."
+        "reason": "Alternative upstream — emits the same kubeconfig + vpc_id outputs."
       },
       {
         "module": "modules/eks-cluster-hp-nodes",
-        "reason": "Logical predecessor — HP-nodes attaches the ens7/ens8 secondary ENIs that these NADs bind to. Wire as depends_on in the blueprint, not as a from_module input."
+        "reason": "Logical predecessor — HP-nodes attaches the ens7/ens8 secondary ENIs that these NADs bind to AND creates the tagged TMM subnets this module discovers. Wire as depends_on in the blueprint."
       }
     ]
   },
@@ -74,6 +78,14 @@
         "source": "module",
         "from_module": "modules/eks-cluster-register",
         "from_output": "vpc_id"
+      },
+      {
+        "name": "multus_ready",
+        "type": "boolean",
+        "description": "Gate from eks-cluster-install-multus. tmm-nads asserts this is true before applying NAD CRs. Auto-wired in variant blueprints from install-multus.multus_ready.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-multus",
+        "from_output": "multus_ready"
       }
     ],
     "optional": [
@@ -83,27 +95,6 @@
         "description": "AWS session token. Populated for STS / SSO / assumed-role; empty for static keys.",
         "source": "user",
         "sensitive": true,
-        "default": ""
-      },
-      {
-        "name": "install_multus",
-        "type": "boolean",
-        "description": "Apply the upstream multus-daemonset manifest. Set false only if Multus is already installed on the cluster.",
-        "source": "user",
-        "default": true
-      },
-      {
-        "name": "multus_version",
-        "type": "string",
-        "description": "Multus release tag. Default tracks a tested stable release.",
-        "source": "user",
-        "default": "v4.1.0"
-      },
-      {
-        "name": "multus_manifest_url",
-        "type": "string",
-        "description": "Explicit override URL for the multus-daemonset manifest. Empty = build from multus_version.",
-        "source": "user",
         "default": ""
       },
       {
@@ -180,11 +171,6 @@
   },
   "outputs": {
     "key_outputs": [
-      {
-        "name": "multus_installed",
-        "type": "boolean",
-        "description": "Whether Multus was installed by this module."
-      },
       {
         "name": "nad_external_name",
         "type": "string",

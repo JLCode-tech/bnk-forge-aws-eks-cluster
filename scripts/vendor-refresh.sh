@@ -41,11 +41,13 @@ UPSTREAM_PATHS=(
   "modules/bnk-prerequisites"
   "modules/cert-manager"
   "modules/bnk-cert-issuer"
+  "modules/install-multus"
 )
 LOCAL_NAMES=(
   "eks-cluster-install-bnk-prereqs"
   "eks-cluster-install-cert-manager"
   "eks-cluster-install-cert-issuer"
+  "eks-cluster-install-multus"
 )
 
 # Rewrites applied to pack.json + module.json after copy:
@@ -57,12 +59,14 @@ def remap_dep:
   if .module == "modules/cert-manager" then .module = "modules/eks-cluster-install-cert-manager"
   elif .module == "modules/bnk-prerequisites" then .module = "modules/eks-cluster-install-bnk-prereqs"
   elif .module == "modules/bnk-cert-issuer" then .module = "modules/eks-cluster-install-cert-issuer"
+  elif .module == "modules/install-multus" then .module = "modules/eks-cluster-install-multus"
   else . end;
 
 def remap_from_module:
   if .from_module == "modules/cert-manager" then .from_module = "modules/eks-cluster-install-cert-manager"
   elif .from_module == "modules/bnk-prerequisites" then .from_module = "modules/eks-cluster-install-bnk-prereqs"
   elif .from_module == "modules/bnk-cert-issuer" then .from_module = "modules/eks-cluster-install-cert-issuer"
+  elif .from_module == "modules/install-multus" then .from_module = "modules/eks-cluster-install-multus"
   else . end;
 
 .module.path = $new_path

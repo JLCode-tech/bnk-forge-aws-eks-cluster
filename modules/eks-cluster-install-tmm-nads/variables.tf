@@ -45,25 +45,17 @@ variable "forge_kubeconfig_content" {
 }
 
 # =============================================================================
-# Multus installation
+# Upstream gate
 # =============================================================================
+# Multus install is now handled by the cloud-agnostic eks-cluster-install-
+# multus module (vendored from bnk-forge-catalog-shared). The blueprint
+# wires that module's multus_ready output into this variable so the NAD
+# applies below have a plan-time assertion they ran in order.
 
-variable "install_multus" {
-  description = "When true, apply the upstream multus-daemonset manifest. AWS EKS does NOT ship Multus by default — TMM's secondary network attachments require it. Set false if your cluster already has Multus installed (some platforms do this via an addon)."
+variable "multus_ready" {
+  description = "Gate from eks-cluster-install-multus. Must be true before NAD CRs can be applied — Multus must be installed so the NetworkAttachmentDefinition CRD exists and the CNI binary is on every node. Auto-wired in the variant blueprints from install-multus.multus_ready."
   type        = bool
-  default     = true
-}
-
-variable "multus_version" {
-  description = "Multus release tag to install. Default tracks a tested stable release. The full manifest URL is built as github.com/k8snetworkplumbingwg/multus-cni/<version>/deployments/multus-daemonset.yml."
-  type        = string
-  default     = "v4.1.0"
-}
-
-variable "multus_manifest_url" {
-  description = "Explicit override for the multus-daemonset manifest URL. Empty = build from multus_version. Use this to pin a private mirror or vendored copy."
-  type        = string
-  default     = ""
+  default     = false
 }
 
 # =============================================================================
