@@ -8,7 +8,7 @@ Apply the CNEInstance CR on AWS EKS, lay down AWS-specific supporting resources,
 |---|---|---|
 | 1 | Render + apply the `cloud-network-mapping` ConfigMap with AWS AZ → subnet mapping. The CNE controller reads it for multi-AZ TMM placement. The AZ/subnet list is **auto-wired** from `eks-cluster-register.cloud_az_subnet_mappings` — discovered from the EKS cluster's own VPC config, so users don't have to re-enter what EKS already knows. | Skipped only if the EKS cluster returns no subnets (shouldn't happen in practice). |
 | 2 | Render + apply the `CNEInstance` CR with AWS-tuned production defaults. FLO observes the CR and rolls out CWC, DSSM, Observer, OTEL, RabbitMQ, TMM, and the IPAM operator. | Always |
-| 3 | Render + apply the `BNKGateway` CR (`kind: F5BnkGateway`) — IPAM CR that gates Gateway-API translation on AWS/EKS (see [bnk-forge-modules PR #58](https://github.com/JLCode-tech/bnk-forge-modules/pull/58) for the discovery trail). | Skipped if `vip_cidr` is empty. |
+| 3 | Render + apply the `BNKGateway` CR (`kind: F5BnkGateway`) — IPAM CR that gates Gateway-API translation on AWS/EKS (see [bnk-forge-modules PR #58](https://github.com/JLCode-tech/bnk-forge-modules/pull/58) for the discovery trail). Listener networks resolved from `vip_cidr` (explicit) or `tmm_external_subnets_by_az` (tag-discovered). | Skipped only if both are empty. |
 | 4 | Create IAM policy (`<cluster>-allow-ec2-vip`) + IRSA role (`<cluster>-cne-controller-vip`) with OIDC trust scoped to the CNE controller's SA. | Always |
 | 5 | Wait for FLO to create the CNE controller SA (up to `wait_for_sa_timeout_seconds`), annotate it with `eks.amazonaws.com/role-arn`, rollout-restart the deployment. | Always |
 
@@ -45,8 +45,33 @@ Apply the CNEInstance CR on AWS EKS, lay down AWS-specific supporting resources,
 | `watch_namespaces` | `["All"]` | Which namespaces the controller watches. |
 | `network_attachments` | `["ens7-ipvlan-l2"]` | NAD names attached to TMM. Matches the future `network-setup` module's default NAD. |
 | `storage_class_name` | `gp3` | EKS gp3 is the AWS default. |
-| `vip_cidr` | `""` | CIDR for BNK Gateway VIPs. Module computes `start_address = cidrhost(vip_cidr, 1)`, `end_address = cidrhost(vip_cidr, -2)` for the BNKGateway CR. Empty = skip CR. |
+| `vip_cidr` | `""` | Explicit CIDR for BNK Gateway VIPs. When set, builds a single listener network — overrides auto-discovery. Module computes `start_address = cidrhost(vip_cidr, 1)`, `end_address = cidrhost(vip_cidr, -2)`. |
 | `bnk_gateway_name`, `vip_network_name` | `bnk-gateway`, `default` | BNKGateway CR + listener-network names. Rarely changed. |
+
+## BNKGateway listener-networks resolution
+
+Three-tier order — first match wins:
+
+| Order | Source | Behavior |
+|---|---|---|
+| 1 | `vip_cidr` (blueprint input) | Single listener network from this CIDR. Use when VIPs live somewhere other than tagged TMM subnets (e.g. a TGW-routed external CIDR). |
+| 2 | `tmm_external_subnets_by_az` (auto-wired from `cluster-register`) | Multi-AZ listener networks: one entry per AZ subnet. Tag-discovered (see below). |
+| 3 | Neither | BNKGateway CR is skipped; the CNE controller will silently ignore Gateway/HTTPRoute CRs. |
+
+### Tag-based discovery convention
+
+Customers tag their TMM data-plane AWS subnets:
+
+```
+Tag key:   f5-bnk-role
+Tag value: tmm-external
+```
+
+When the cluster-register module runs, it queries `data.aws_subnets` filtered by this tag (scoped to the cluster's VPC), then `data.aws_subnet` for each matching subnet to pick up AZ + CIDR. Output exposes the structure to cneinstall via `source: module` auto-wiring.
+
+Result: customers who tag their subnets get the BNKGateway CR built for them, with one listener network per AZ subnet. No `vip_cidr` needed.
+
+**Caveat:** the listener network covers the full subnet CIDR (cidrhost +1 to cidrhost -2). If your TMM selfip IPs (configured in the F5SPKVlan CR you'll apply later) live inside that range, set `vip_cidr` explicitly to a non-overlapping CIDR instead. The PDF's example with selfip at `192.168.192.164` inside a `192.168.192.0/24` listener range is a case where you'd want to override.
 `cloud_az_subnet_mappings`, `availability_zone_count`, `worker_node_count`, `vpc_cidr` are not user-facing inputs — they're auto-wired from `eks-cluster-register` via `data.aws_eks_cluster` + `data.aws_subnet` + `data.aws_vpc` + `data.aws_eks_node_group`.
 
 ## Cluster admin prerequisite (manual)

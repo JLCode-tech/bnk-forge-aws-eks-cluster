@@ -214,9 +214,18 @@
       {
         "name": "vip_cidr",
         "type": "string",
-        "description": "CIDR for BNK Gateway VIPs. Module derives the BNKGateway CR start/end addresses from this. Empty = skip the CR.",
+        "description": "Explicit CIDR for BNK Gateway VIPs (single listener-network override). If empty and tmm_external_subnets_by_az is non-empty, the module auto-builds multi-AZ listener networks from the discovered subnets.",
         "default": "",
         "source": "user"
+      },
+      {
+        "name": "tmm_external_subnets_by_az",
+        "type": "list(object({name=string,subnets=list(object({cidr=string,subnet_id=string}))}))",
+        "description": "TMM external subnets per AZ, auto-wired from cluster-register (tag-discovered).",
+        "default": [],
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "tmm_external_subnets_by_az"
       },
       {
         "name": "bnk_gateway_name",
