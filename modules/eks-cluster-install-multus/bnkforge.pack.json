@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "Install Multus CNI",
+    "path": "modules/eks-cluster-install-multus",
+    "version": "0.1.0-alpha",
+    "category": "k8s",
+    "description": "Cloud-agnostic primitive: install Multus CNI on a Kubernetes cluster. Multus is a meta-CNI that lets pods attach to multiple networks via NetworkAttachmentDefinition CRs — required for BNK TMM's data-plane interfaces. Pure k8s logic; no cloud bits. Per-cloud catalogs vendor this and chain a cloud-specific NAD-creation module after it."
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "dependencies": {
+    "required": [],
+    "optional": []
+  },
+  "inputs": {
+    "required": [],
+    "optional": [
+      {
+        "name": "install_multus",
+        "type": "boolean",
+        "description": "Apply the upstream multus-daemonset. Set false if Multus is already installed on the cluster.",
+        "source": "user",
+        "default": true
+      },
+      {
+        "name": "multus_version",
+        "type": "string",
+        "description": "Multus release tag.",
+        "source": "user",
+        "default": "v4.1.0"
+      },
+      {
+        "name": "multus_manifest_url",
+        "type": "string",
+        "description": "Explicit override for the multus-daemonset URL. Empty = build from multus_version.",
+        "source": "user",
+        "default": ""
+      },
+      {
+        "name": "multus_crd_wait_timeout",
+        "type": "string",
+        "description": "Timeout for the NetworkAttachmentDefinition CRD to be Established.",
+        "source": "user",
+        "default": "120s"
+      },
+      {
+        "name": "multus_rollout_wait_timeout",
+        "type": "string",
+        "description": "Timeout for the kube-multus-ds DaemonSet rollout.",
+        "source": "user",
+        "default": "180s"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "multus_installed",
+        "type": "boolean",
+        "description": "Whether Multus was installed by this module."
+      },
+      {
+        "name": "multus_manifest_url",
+        "type": "string",
+        "description": "Resolved manifest URL."
+      },
+      {
+        "name": "multus_ready",
+        "type": "boolean",
+        "description": "Gate output — true once the DS has rolled out and the CRD is Established. Downstream NAD modules depend on this."
+      }
+    ]
+  },
+  "credentials": {
+    "required": [],
+    "optional": []
+  }
+}

@@ -315,12 +315,21 @@
       }
     },
     {
-      "id": "tmm-nads",
-      "name": "TMM NADs (Multus + ens7/ens8 NetworkAttachmentDefinitions)",
-      "description": "Install Multus CNI and the ens7-ipvlan-l2 + ens8-ipvlan-l2 NetworkAttachmentDefinitions TMM needs for its dual data-plane interfaces. Each NAD's static-address placeholder is derived from the matching f5-bnk-role-tagged subnet via apply-time discovery — no hardcoded 10.10.1.1/24.",
-      "module": "modules/eks-cluster-install-tmm-nads",
-      "version": "0.2.0-alpha",
+      "id": "install-multus",
+      "name": "Install Multus CNI",
+      "description": "Cloud-agnostic Multus CNI install (vendored from bnk-forge-catalog-shared). Pre-requisite for tmm-nads.",
+      "module": "modules/eks-cluster-install-multus",
+      "version": "0.1.0-alpha",
       "depends_on": ["hp-nodes"],
+      "inputs": {}
+    },
+    {
+      "id": "tmm-nads",
+      "name": "TMM NADs (ens7/ens8 NetworkAttachmentDefinitions)",
+      "description": "Create the ens7-ipvlan-l2 + ens8-ipvlan-l2 NetworkAttachmentDefinitions TMM needs for its dual data-plane interfaces. Each NAD's static-address placeholder is derived from the matching f5-bnk-role-tagged subnet via apply-time discovery — no hardcoded 10.10.1.1/24.",
+      "module": "modules/eks-cluster-install-tmm-nads",
+      "version": "0.3.0-alpha",
+      "depends_on": ["hp-nodes", "install-multus"],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
         "aws_secret_access_key": "${aws_secret_access_key}",
@@ -334,7 +343,7 @@
       "description": "Create BNK namespaces, FAR image pull secrets, and download the BNK manifest.",
       "module": "modules/eks-cluster-install-bnk-prereqs",
       "version": "1.0.0",
-      "depends_on": ["cluster-create", "hp-nodes", "tmm-nads"],
+      "depends_on": ["cluster-create", "hp-nodes", "install-multus", "tmm-nads"],
       "inputs": {
         "cne_pull_secret": "${cne_pull_secret}",
         "operator_namespace": "${operator_namespace}",

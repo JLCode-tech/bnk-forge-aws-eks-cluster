@@ -1,8 +1,3 @@
-output "multus_installed" {
-  description = "True if this module applied the Multus daemonset (install_multus = true)."
-  value       = var.install_multus
-}
-
 output "nad_external_name" {
   description = "Name of the external NetworkAttachmentDefinition. Use this as the network_attachments[0] value in cneinstall."
   value       = var.nad_external_name

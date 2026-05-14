@@ -2,5 +2,5 @@
 # Override the upstream ref via the UPSTREAM_REF env var when re-running.
 UPSTREAM_REPO=https://github.com/JLCode-tech/bnk-forge-catalog-shared.git
 UPSTREAM_REF=release/2.2
-UPSTREAM_SHA=21b13d52a147b4595ac705e53bca2801d704786f
-REFRESHED_AT=2026-05-13T22:17:27Z
+UPSTREAM_SHA=72501a58960e2ea27ba295afed68d374880ae848
+REFRESHED_AT=2026-05-14T05:39:28Z

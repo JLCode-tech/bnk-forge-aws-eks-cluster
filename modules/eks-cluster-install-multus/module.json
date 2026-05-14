@@ -1,0 +1,83 @@
+{
+  "module": {
+    "name": "Install Multus CNI",
+    "path": "modules/eks-cluster-install-multus",
+    "version": "0.1.0-alpha",
+    "layer": "kubernetes",
+    "category": "k8s",
+    "description": "Cloud-agnostic primitive: install Multus CNI on a Kubernetes cluster. Required for BNK TMM's data-plane network attachments. Per-cloud catalogs vendor this and chain a cloud-specific NAD-creation module after it.",
+    "cloud_specific": false,
+    "supported_platforms": [
+      "any"
+    ]
+  },
+  "source": {
+    "kind": "official",
+    "channel": "release/2.2"
+  },
+  "execution": {
+    "engine": "opentofu",
+    "deploy_models": [
+      "kubernetes_manifest"
+    ]
+  },
+  "contract": {
+    "metadata_version": "module-metadata/v2alpha1"
+  },
+  "dependencies": {
+    "required": [],
+    "optional": []
+  },
+  "inputs": {
+    "required": [],
+    "optional": [
+      {
+        "name": "install_multus",
+        "type": "boolean",
+        "description": "Apply the multus-daemonset.",
+        "default": true,
+        "source": "user"
+      },
+      {
+        "name": "multus_version",
+        "type": "string",
+        "description": "Multus release tag.",
+        "default": "v4.1.0",
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "multus_ready",
+        "type": "boolean",
+        "description": "Gate output: DS rolled out + CRD Established.",
+        "used_by": [
+          "per-cloud NAD modules"
+        ],
+        "sensitive": false
+      },
+      {
+        "name": "multus_installed",
+        "type": "boolean",
+        "description": "Echoed value of install_multus.",
+        "used_by": [],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": [
+      "local",
+      "null"
+    ],
+    "optional": []
+  },
+  "deployment": {
+    "order": 20,
+    "estimated_time": "2 minutes",
+    "requires_user_input": false,
+    "sensitive_inputs": []
+  }
+}
