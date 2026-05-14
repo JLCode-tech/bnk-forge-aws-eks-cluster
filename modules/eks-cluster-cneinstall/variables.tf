@@ -117,7 +117,31 @@ variable "deployment_size" {
 }
 
 variable "tmm_replicas" {
-  description = "Number of TMM replicas to deploy. Typically one per AZ for multi-AZ setups."
+  description = <<-EOT
+    Number of TMM replicas to deploy.
+
+    Default 0 = auto-derive from cluster topology: min(availability_zone_count,
+    worker_node_count). The 1-TMM-per-AZ pattern from the F5 install guide is
+    the natural default; worker node count caps that (a TMM pod can't schedule
+    without an available node labeled app=f5-tmm).
+
+    Set to a positive number to override. Cluster admin must still have
+    labeled enough nodes with app=f5-tmm for the requested count to schedule.
+  EOT
+  type        = number
+  default     = 0
+}
+
+# Auto-wired from cluster-register — used to compute the smart tmm_replicas
+# default when the user leaves tmm_replicas = 0.
+variable "availability_zone_count" {
+  description = "Number of distinct AZs the cluster spans. Auto-wired from cluster-register."
+  type        = number
+  default     = 3
+}
+
+variable "worker_node_count" {
+  description = "Total worker node count in the cluster (sum across node groups). Auto-wired from cluster-register. Caps the smart tmm_replicas default."
   type        = number
   default     = 3
 }
@@ -177,28 +201,34 @@ variable "cloud_az_subnet_mappings" {
 # Programmed=True. Documented in bnk-forge-modules PR #58.)
 # =============================================================================
 
-variable "bnk_gateway_chassis" {
+variable "vip_cidr" {
   description = <<-EOT
-    F5BnkGateway chassis CR config. Required on AWS/EKS for Gateway-API
-    translation. Without this CR, the CNE controller logs 'Watched application
-    namespaces: []' and ignores all Gateway+HTTPRoute CRs.
+    CIDR block from which BNK Gateway VIPs are allocated. The module computes
+    the F5BnkGateway chassis CR's defaultListenerNetworks entry from this:
+      start_address = cidrhost(vip_cidr, 1)     # first usable
+      end_address   = cidrhost(vip_cidr, -2)    # last usable (skip broadcast)
 
-    Use explicit start_address + end_address per listener network. The CRD's
-    ipv4BaseCidr alternative is rejected by the controller runtime.
+    Empty string = skip the F5BnkGateway chassis CR entirely. Without the
+    chassis CR, the CNE controller silently ignores all Gateway/HTTPRoute CRs
+    on AWS/EKS — set this for any Gateway-API workload.
 
-    Empty default_listener_networks list = skip chassis CR creation.
+    Pick a CIDR carved from the cluster's VPC CIDR. For a VPC of 192.168.0.0/16,
+    a common pattern is to reserve 192.168.250.0/24 (or similar) for BNK VIPs.
   EOT
-  type = object({
-    name = optional(string, "bnk-gateway-chassis")
-    default_listener_networks = list(object({
-      name          = string
-      start_address = string
-      end_address   = string
-    }))
-  })
-  default = {
-    default_listener_networks = []
-  }
+  type        = string
+  default     = ""
+}
+
+variable "chassis_name" {
+  description = "Name of the F5BnkGateway chassis CR."
+  type        = string
+  default     = "bnk-gateway-chassis"
+}
+
+variable "vip_network_name" {
+  description = "Logical name for the VIP listener network in the F5BnkGateway chassis CR's defaultListenerNetworks entry."
+  type        = string
+  default     = "default"
 }
 
 # =============================================================================

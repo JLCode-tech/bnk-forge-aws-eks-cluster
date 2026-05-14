@@ -29,8 +29,13 @@ output "cloud_network_mapping_applied" {
 }
 
 output "bnk_gateway_chassis_applied" {
-  description = "True if the F5BnkGateway chassis CR was applied (i.e. default_listener_networks was non-empty)."
-  value       = length(var.bnk_gateway_chassis.default_listener_networks) > 0
+  description = "True if the F5BnkGateway chassis CR was applied (i.e. vip_cidr was non-empty)."
+  value       = local.vip_chassis_enabled
+}
+
+output "effective_tmm_replicas" {
+  description = "The tmm_replicas value actually applied to the CNEInstance CR. Equals var.tmm_replicas if explicitly set; otherwise min(availability_zone_count, worker_node_count)."
+  value       = local.effective_tmm_replicas
 }
 
 output "cneinstance_ready" {

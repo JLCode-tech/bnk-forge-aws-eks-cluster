@@ -126,6 +126,21 @@
         "name": "cloud_az_subnet_mappings",
         "type": "list(object({name=string,subnets=list(object({cidr=string,subnet_id=string}))}))",
         "description": "AZ → subnets list discovered from the cluster's VPC config. Consumed by eks-cluster-cneinstall to auto-populate the cloud-network-mapping ConfigMap so users don't have to re-enter what EKS already knows."
+      },
+      {
+        "name": "vpc_cidr",
+        "type": "string",
+        "description": "Primary CIDR block of the EKS cluster's VPC. Downstream modules use this to derive sensible defaults for VIP ranges."
+      },
+      {
+        "name": "worker_node_count",
+        "type": "number",
+        "description": "Total desired worker node count across all EKS node groups."
+      },
+      {
+        "name": "availability_zone_count",
+        "type": "number",
+        "description": "Number of distinct AZs the cluster spans."
       }
     ]
   },

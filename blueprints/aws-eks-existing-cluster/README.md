@@ -34,12 +34,22 @@ Current revision: `version: 0.4.0`, `maturity: preview`. The License module is t
 | `license_mode` | User | No | FLO license mode: `connected` (default) or `f5licenseproxy`. |
 | `container_platform` | User | No | FLO containerPlatform. Default `AWS`. |
 | `deployment_size` | User | No | CNEInstance size: Small/Medium/Large. Default `Small`. |
-| `tmm_replicas` | User | No | Number of TMM replicas. Default `3`. |
+| `tmm_replicas` | User | No | Number of TMM replicas. Default `0` = auto: `min(cluster AZ count, worker node count)`. |
 | `watch_namespaces` | User | No | Namespaces the CNE controller watches. Default `["All"]`. |
 | `network_attachments` | User | No | NAD names attached to TMM. Default `["ens7-ipvlan-l2"]`. |
-| `bnk_gateway_chassis` | User | **For Gateway-API traffic** | F5BnkGateway chassis config. Required if you want Gateway/HTTPRoute traffic to flow. Empty default. |
+| `vip_cidr` | User | **For Gateway-API traffic** | CIDR carved from your VPC for BNK Gateway VIPs (e.g. `192.168.250.0/24`). Empty = skip chassis CR; required if you want Gateway/HTTPRoute traffic to flow. |
 
-> **`cloud_az_subnet_mappings` is auto-wired** from `eks-cluster-register`. The register module queries the EKS cluster's own VPC config and emits the AZ → subnet structure that `cneinstall` consumes for the cloud-network-mapping ConfigMap. Users don't see or set this — EKS already knows it.
+> **`cloud_az_subnet_mappings`, `availability_zone_count`, `worker_node_count`, `vpc_cidr`** are all auto-wired from `eks-cluster-register`. The register module queries the EKS cluster's own VPC + node group config and exposes them so `cneinstall` can compute sensible defaults (the tmm_replicas auto-default uses both AZ and node counts). Users don't see or set these — EKS already knows them.
+
+## Cluster admin prerequisite (manual)
+
+Before deploying, label the nodes you want to host TMM pods:
+
+```bash
+kubectl label node <node-name> app=f5-tmm
+```
+
+FLO places TMM pods on nodes carrying this label. The `tmm_replicas` auto-default (1 per AZ, capped by worker count) only works if enough nodes are labeled. For a 3-AZ cluster with one node per AZ, label all three.
 
 ## Module chain (depends_on graph)
 

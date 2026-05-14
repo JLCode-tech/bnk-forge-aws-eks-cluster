@@ -179,16 +179,34 @@
       {
         "name": "deployment_size",
         "type": "string",
-        "description": "CNEInstance deploymentSize. One of: Small, Medium, Large.",
+        "description": "CNEInstance deploymentSize per F5 docs. One of: Small (2 CPU, 4 GiB hugepages-2Mi), Medium (4 CPU, 8 GiB), Large (8 CPU, 16 GiB), Max (16 CPU, 25 GiB).",
         "default": "Small",
         "source": "user"
       },
       {
         "name": "tmm_replicas",
         "type": "number",
-        "description": "Number of TMM replicas. Typically one per AZ for multi-AZ setups.",
-        "default": 3,
+        "description": "Number of TMM replicas. 0 = auto-derive from cluster topology: min(availability_zone_count, worker_node_count). Set a positive number to override.",
+        "default": 0,
         "source": "user"
+      },
+      {
+        "name": "availability_zone_count",
+        "type": "number",
+        "description": "Number of AZs the cluster spans. Auto-wired from cluster-register; used as the natural ceiling for the smart tmm_replicas default.",
+        "default": 3,
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "availability_zone_count"
+      },
+      {
+        "name": "worker_node_count",
+        "type": "number",
+        "description": "Total worker node count. Auto-wired from cluster-register; caps the smart tmm_replicas default (TMM pod can't schedule without a node).",
+        "default": 3,
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "worker_node_count"
       },
       {
         "name": "watch_namespaces",
@@ -221,12 +239,24 @@
         "from_output": "cloud_az_subnet_mappings"
       },
       {
-        "name": "bnk_gateway_chassis",
-        "type": "object({name=optional(string),default_listener_networks=list(object({name=string,start_address=string,end_address=string}))})",
-        "description": "F5BnkGateway chassis CR config — required for Gateway-API translation on AWS/EKS. Empty default_listener_networks list = skip CR creation.",
-        "default": {
-          "default_listener_networks": []
-        },
+        "name": "vip_cidr",
+        "type": "string",
+        "description": "CIDR for BNK Gateway VIP allocation. Module derives the F5BnkGateway chassis CR's start_address (cidrhost +1) and end_address (cidrhost -2) from this. Empty = skip chassis CR (the controller will then ignore Gateway/HTTPRoute CRs). Pick a CIDR carved from the cluster VPC; e.g. for a 192.168.0.0/16 VPC, '192.168.250.0/24' is a typical choice.",
+        "default": "",
+        "source": "user"
+      },
+      {
+        "name": "chassis_name",
+        "type": "string",
+        "description": "Name of the F5BnkGateway chassis CR.",
+        "default": "bnk-gateway-chassis",
+        "source": "user"
+      },
+      {
+        "name": "vip_network_name",
+        "type": "string",
+        "description": "Logical name for the VIP listener network in the F5BnkGateway chassis CR.",
+        "default": "default",
         "source": "user"
       }
     ]
@@ -251,7 +281,12 @@
       {
         "name": "bnk_gateway_chassis_applied",
         "type": "boolean",
-        "description": "True if the F5BnkGateway chassis CR was applied."
+        "description": "True if the F5BnkGateway chassis CR was applied (i.e. vip_cidr was non-empty)."
+      },
+      {
+        "name": "effective_tmm_replicas",
+        "type": "number",
+        "description": "The tmm_replicas value actually applied. Equals user override if set, otherwise min(AZ count, worker node count)."
       },
       {
         "name": "cneinstance_ready",

@@ -173,15 +173,15 @@
       {
         "name": "deployment_size",
         "type": "string",
-        "description": "CNEInstance deploymentSize: Small / Medium / Large.",
+        "description": "CNEInstance deploymentSize per F5 docs: Small / Medium / Large / Max (2/4/8/16 CPU, 4/8/16/25 GiB hugepages-2Mi).",
         "default": "Small",
         "order": 70
       },
       {
         "name": "tmm_replicas",
         "type": "number",
-        "description": "Number of TMM replicas. Typically one per AZ for multi-AZ setups.",
-        "default": 3,
+        "description": "Number of TMM replicas. 0 = auto-derive from cluster topology: min(AZ count, worker node count). Set a positive number to override. Cluster admin still has to label nodes with app=f5-tmm for FLO to schedule TMM pods.",
+        "default": 0,
         "order": 71
       },
       {
@@ -199,10 +199,10 @@
         "order": 73
       },
       {
-        "name": "bnk_gateway_chassis",
-        "type": "object",
-        "description": "F5BnkGateway chassis config — required on AWS/EKS for Gateway-API translation. Schema: {name='bnk-gateway-chassis', default_listener_networks=[{name='public', start_address='10.0.0.1', end_address='10.0.0.254'}]}. Empty default_listener_networks list = skip CR creation.",
-        "default": { "default_listener_networks": [] },
+        "name": "vip_cidr",
+        "type": "string",
+        "description": "CIDR for BNK Gateway VIP allocation. Module derives the F5BnkGateway chassis CR start/end addresses from this. Empty = skip chassis CR (controller will then ignore Gateway/HTTPRoute CRs). Pick a CIDR carved from your cluster VPC; e.g. for a 192.168.0.0/16 VPC, '192.168.250.0/24' is typical.",
+        "default": "",
         "order": 81
       }
     ]
@@ -293,7 +293,7 @@
         "tmm_replicas": "${tmm_replicas}",
         "watch_namespaces": "${watch_namespaces}",
         "network_attachments": "${network_attachments}",
-        "bnk_gateway_chassis": "${bnk_gateway_chassis}"
+        "vip_cidr": "${vip_cidr}"
       }
     }
   ]

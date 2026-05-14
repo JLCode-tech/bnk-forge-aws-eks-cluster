@@ -152,16 +152,34 @@
       {
         "name": "deployment_size",
         "type": "string",
-        "description": "CNEInstance deploymentSize (Small/Medium/Large).",
+        "description": "CNEInstance deploymentSize per F5 docs: Small (2CPU/4Gi), Medium (4CPU/8Gi), Large (8CPU/16Gi), Max (16CPU/25Gi).",
         "default": "Small",
         "source": "user"
       },
       {
         "name": "tmm_replicas",
         "type": "number",
-        "description": "Number of TMM replicas.",
-        "default": 3,
+        "description": "Number of TMM replicas. 0 = auto-derive: min(availability_zone_count, worker_node_count).",
+        "default": 0,
         "source": "user"
+      },
+      {
+        "name": "availability_zone_count",
+        "type": "number",
+        "description": "AZ count from cluster-register, ceiling for the smart tmm_replicas default.",
+        "default": 3,
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "availability_zone_count"
+      },
+      {
+        "name": "worker_node_count",
+        "type": "number",
+        "description": "Worker node count from cluster-register, caps the smart tmm_replicas default.",
+        "default": 3,
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "worker_node_count"
       },
       {
         "name": "watch_namespaces",
@@ -194,12 +212,24 @@
         "from_output": "cloud_az_subnet_mappings"
       },
       {
-        "name": "bnk_gateway_chassis",
-        "type": "object",
-        "description": "F5BnkGateway chassis CR config (required for Gateway-API translation on AWS).",
-        "default": {
-          "default_listener_networks": []
-        },
+        "name": "vip_cidr",
+        "type": "string",
+        "description": "CIDR for BNK Gateway VIPs. Module derives chassis CR start/end addresses from this. Empty = skip chassis CR.",
+        "default": "",
+        "source": "user"
+      },
+      {
+        "name": "chassis_name",
+        "type": "string",
+        "description": "F5BnkGateway chassis CR name.",
+        "default": "bnk-gateway-chassis",
+        "source": "user"
+      },
+      {
+        "name": "vip_network_name",
+        "type": "string",
+        "description": "Logical name for the VIP listener network in the chassis CR.",
+        "default": "default",
         "source": "user"
       }
     ]

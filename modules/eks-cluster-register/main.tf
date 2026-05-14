@@ -36,6 +36,25 @@ data "aws_subnet" "cluster_subnets" {
   id       = each.value
 }
 
+# Expose the VPC's CIDR so downstream modules can derive sensible defaults
+# for VIP ranges, app subnets, etc. without re-asking the user.
+data "aws_vpc" "cluster_vpc" {
+  id = data.aws_eks_cluster.existing.vpc_config[0].vpc_id
+}
+
+# List the EKS node groups so we can sum total worker capacity — used by
+# cneinstall to default tmm_replicas to a sensible value bounded by the
+# actual node count.
+data "aws_eks_node_groups" "all" {
+  cluster_name = data.aws_eks_cluster.existing.name
+}
+
+data "aws_eks_node_group" "each" {
+  for_each        = toset(data.aws_eks_node_groups.all.names)
+  cluster_name    = data.aws_eks_cluster.existing.name
+  node_group_name = each.value
+}
+
 locals {
   # Group subnets by AZ. Each AZ entry holds the list of (cidr, subnet_id)
   # pairs in that AZ. Matches the shape cneinstall's
@@ -53,6 +72,14 @@ locals {
       subnets = subnets
     }
   ]
+
+  # Total worker node count across all node groups in the cluster.
+  # Uses scaling_config.desired_size as the canonical "what's running now"
+  # number per node group. cneinstall uses this as an upper bound on
+  # tmm_replicas (a TMM pod can't schedule without an available node).
+  worker_node_count = sum([
+    for ng in data.aws_eks_node_group.each : ng.scaling_config[0].desired_size
+  ])
 
   kubeconfig = yamlencode({
     apiVersion      = "v1"
