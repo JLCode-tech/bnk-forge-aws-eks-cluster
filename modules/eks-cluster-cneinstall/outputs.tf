@@ -33,6 +33,16 @@ output "bnk_gateway_applied" {
   value       = local.bnk_gateway_enabled
 }
 
+output "discovered_tmm_external_subnets_by_az" {
+  description = "Subnets tagged f5-bnk-role=tmm-external in the cluster VPC, discovered at cneinstall apply time. Used to build the BNKGateway CR's listener networks when var.vip_cidr is unset and at least one tagged subnet exists. Empty list = nothing tagged (BNKGateway then skipped unless vip_cidr is provided)."
+  value       = local.discovered_tmm_external_subnets_by_az
+}
+
+output "discovered_tmm_internal_subnets_by_az" {
+  description = "Subnets tagged f5-bnk-role=tmm-internal in the cluster VPC, discovered at cneinstall apply time. Reserved for a future NAD-provisioning module that will create ens8-ipvlan-l2 referencing these. Empty list = nothing tagged (the no-HP-nodes deployment path)."
+  value       = local.discovered_tmm_internal_subnets_by_az
+}
+
 output "effective_tmm_replicas" {
   description = "The tmm_replicas value actually applied to the CNEInstance CR. Equals var.tmm_replicas if explicitly set; otherwise min(availability_zone_count, worker_node_count)."
   value       = local.effective_tmm_replicas

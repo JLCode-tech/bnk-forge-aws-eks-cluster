@@ -194,7 +194,7 @@
       {
         "name": "network_attachments",
         "type": "list(string)",
-        "description": "NetworkAttachmentDefinition names attached to TMM.",
+        "description": "NetworkAttachmentDefinition names attached to TMM. Default ['ens7-ipvlan-l2'] ASSUMES your existing cluster nodes already have a secondary ENI attached to a TMM-external subnet and the matching NAD is applied — that is, you've followed the F5 multi-node BNK on AWS/EKS install guide manually. If you want a turn-key dedicated HP node pool with the full 3-interface TMM model (ens7 external + ens8 internal), use the aws-eks-existing-cluster-with-hp-nodes blueprint instead.",
         "default": ["ens7-ipvlan-l2"],
         "order": 73
       },

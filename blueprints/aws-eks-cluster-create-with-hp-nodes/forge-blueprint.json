@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "blueprint": {
-    "id": "aws-eks-cluster-create",
+    "id": "aws-eks-cluster-create-with-hp-nodes",
     "version": "0.1.0",
-    "name": "AWS EKS Cluster Create",
-    "description": "Provision a new AWS EKS cluster end-to-end (VPC, 3 AZs, NAT, managed node group, IRSA OIDC) and lay down the BNK control plane on top: namespaces + FAR pull secrets + manifest, cert-manager, BNK cert issuer, F5 Lifecycle Operator (FLO), and the CNEInstance (AWS IRSA, cloud-network-mapping ConfigMap, optional BNKGateway CR for VIP IPAM). The cluster module uses terraform-aws-modules/vpc/aws and terraform-aws-modules/eks/aws so production hardening (IMDSv2, EBS encryption, OIDC, control-plane logging) comes from a widely-audited community baseline."
+    "name": "AWS EKS Cluster Create + HP Nodes",
+    "description": "Provision a new AWS EKS cluster end-to-end AND a dedicated high-performance node pool with the 3-interface TMM model (CNI + ens7 external + ens8 internal). VPC, 3 AZs, NAT, default-pool node group come from terraform-aws-modules/vpc/aws + eks/aws; HP pool, TMM-external/internal subnets, and dual secondary ENIs come from eks-cluster-hp-nodes. Then lay down the BNK control plane on top. NetworkAttachmentDefinitions (ens7-ipvlan-l2 + ens8-ipvlan-l2) are a manual prerequisite until a dedicated NAD module ships."
   },
   "bnk_version": "2.2",
   "compatibility": {
@@ -29,24 +29,24 @@
   },
   "icon": "Cloud",
   "color": "orange",
-  "estimated_time": "25-40 minutes (greenfield cluster + full BNK install)",
-  "estimated_cost": "AWS usage-based (EKS control plane + node group + NAT gateway)",
-  "difficulty": "intermediate",
-  "maturity": "beta",
-  "tags": ["aws", "eks", "kubernetes", "cluster", "create", "vpc", "cert-manager", "bnk-prereqs", "flo", "cneinstance", "irsa"],
+  "estimated_time": "35-55 minutes (greenfield cluster + HP node pool + BNK install)",
+  "estimated_cost": "AWS usage-based — EKS control plane + default node group + NAT gateway + HP node pool (~3× m5n.large)",
+  "difficulty": "advanced",
+  "maturity": "alpha",
+  "tags": ["aws", "eks", "kubernetes", "cluster", "create", "vpc", "hp-nodes", "tmm", "sriov", "cert-manager", "bnk-prereqs", "flo", "cneinstance", "irsa"],
   "outcomes": [
-    "A new AWS VPC (3 AZs, NAT, public + private subnets) is provisioned",
-    "Private subnets are tagged with f5-bnk-role=tmm-external so cneinstall auto-builds the BNKGateway CR",
-    "A new EKS cluster + managed node group is provisioned via terraform-aws-modules/eks/aws ~> 21.0",
-    "An IRSA OIDC provider is wired automatically by the EKS module",
+    "A new AWS VPC (3 AZs, NAT, public + private subnets) is provisioned via terraform-aws-modules/vpc/aws",
+    "A new EKS cluster + default managed node group is provisioned via terraform-aws-modules/eks/aws ~> 21.0; IRSA OIDC provider auto-wired",
+    "Per-AZ TMM-external subnets (tagged f5-bnk-role=tmm-external) and TMM-internal subnets (tagged f5-bnk-role=tmm-internal) are added to the VPC for the HP node pool",
+    "A dedicated HP EKS managed node group is provisioned with app=f5-tmm label, m5n.large by default; each HP node attaches ens7 (TMM-external) + ens8 (TMM-internal) at first boot with node.k8s.amazonaws.com/no_manage=true",
     "BNK namespaces, FAR pull secrets, and component manifest are deployed",
     "Jetstack cert-manager is installed with BNK-compatible defaults",
     "The BNK CA-backed ClusterIssuer is created and ready for FLO + OTEL certs",
     "F5 Lifecycle Operator (FLO) is installed with AWS-tuned defaults; BNK CRDs are registered",
-    "CNEInstance is applied with AWS-specific cneController env vars; FLO rolls out CWC, DSSM, OTEL, RabbitMQ, TMM, IPAM operator",
+    "CNEInstance is applied with AWS-specific cneController env vars + network_attachments=[ens7-ipvlan-l2, ens8-ipvlan-l2]; FLO schedules TMM pods onto HP nodes",
     "AWS IRSA is wired for the CNE controller — IAM role + OIDC trust + SA annotation + rollout-restart",
-    "cloud-network-mapping ConfigMap is auto-populated from the new VPC's private subnets",
-    "BNKGateway CR (kind: F5BnkGateway) is applied when vip_cidr is set"
+    "cloud-network-mapping ConfigMap is auto-populated from cluster private subnets",
+    "BNKGateway CR (kind: F5BnkGateway) listener networks are auto-built from the HP-nodes TMM-external subnets via cneinstall's apply-time rediscovery"
   ],
   "prerequisites": [
     {
@@ -63,6 +63,11 @@
       "type": "project_secret",
       "name": "jwt_token",
       "description": "F5 BNK License JWT. Bound from a stored project secret in the deploy form."
+    },
+    {
+      "type": "manual_step",
+      "name": "network_attachment_definitions",
+      "description": "ens7-ipvlan-l2 and ens8-ipvlan-l2 NetworkAttachmentDefinitions must exist on the cluster before TMM pods start. Apply manually per the F5 multi-node BNK on AWS/EKS install guide until the dedicated NAD-provisioning module ships."
     }
   ],
   "input_summary": [
@@ -241,16 +246,37 @@
       {
         "name": "network_attachments",
         "type": "list(string)",
-        "description": "NetworkAttachmentDefinition names attached to TMM. Default ['ens7-ipvlan-l2'] ASSUMES you've manually attached a secondary ENI on a TMM-external subnet to each worker node and applied the matching NAD per the F5 install guide. For a turn-key dedicated HP node pool with the full 3-interface TMM model (ens7 external + ens8 internal), use the aws-eks-cluster-create-with-hp-nodes blueprint instead.",
-        "default": ["ens7-ipvlan-l2"],
+        "description": "NetworkAttachmentDefinition names attached to TMM. Default matches the dual-ENI HP node pool: ens7-ipvlan-l2 (external) and ens8-ipvlan-l2 (internal). Both NADs must exist on the cluster — see prerequisites.",
+        "default": ["ens7-ipvlan-l2", "ens8-ipvlan-l2"],
         "order": 73
       },
       {
         "name": "vip_cidr",
         "type": "string",
-        "description": "CIDR for BNK Gateway VIP allocation. Module derives the BNKGateway CR (kind: F5BnkGateway) start/end addresses from this. Empty = skip the CR (controller will then ignore Gateway/HTTPRoute CRs). Pick a CIDR carved from your cluster VPC or from a TMM external AZ subnet; e.g. for the default 10.0.0.0/16 VPC, '10.0.250.0/24' is typical.",
+        "description": "CIDR for BNK Gateway VIP allocation. Module derives the BNKGateway CR start/end addresses from this. Empty = let cneinstall auto-discover from the HP-nodes TMM-external subnets (typical for this blueprint). Set explicitly only if VIPs live outside the TMM-external CIDR range.",
         "default": "",
         "order": 81
+      },
+      {
+        "name": "hp_instance_type",
+        "type": "string",
+        "description": "EC2 instance type for HP nodes. Must support at least 3 ENIs (primary + 2 secondary). Default m5n.large is the minimum; consider m5n.xlarge / c5n.xlarge for higher TMM throughput.",
+        "default": "m5n.large",
+        "order": 90
+      },
+      {
+        "name": "hp_node_count_per_az",
+        "type": "number",
+        "description": "Desired HP nodes per AZ. Total HP nodes = this × availability_zone_count.",
+        "default": 1,
+        "order": 91
+      },
+      {
+        "name": "hp_node_disk_size_gb",
+        "type": "number",
+        "description": "HP node root volume size.",
+        "default": 50,
+        "order": 92
       }
     ]
   },
@@ -258,7 +284,7 @@
     {
       "id": "cluster-create",
       "name": "EKS Cluster Create",
-      "description": "Provision a new VPC + EKS cluster + node group via terraform-aws-modules.",
+      "description": "Provision a new VPC + EKS cluster + default node group via terraform-aws-modules. Note: tag_private_subnets_for_tmm is forced false here so the dedicated HP-nodes TMM subnets are the only ones tagged f5-bnk-role=tmm-external — cneinstall then builds the BNKGateway CR exclusively from the HP subnets.",
       "module": "modules/eks-cluster-create",
       "version": "0.1.0-beta",
       "depends_on": [],
@@ -273,7 +299,24 @@
         "worker_instance_type": "${worker_instance_type}",
         "worker_count_per_az": "${worker_count_per_az}",
         "worker_disk_size_gb": "${worker_disk_size_gb}",
-        "tag_private_subnets_for_tmm": "${tag_private_subnets_for_tmm}"
+        "tag_private_subnets_for_tmm": false
+      }
+    },
+    {
+      "id": "hp-nodes",
+      "name": "HP TMM Node Pool",
+      "description": "Provision dedicated TMM-external + TMM-internal subnets per AZ, an HP EKS managed node group (m5n.large default), and dual secondary ENIs (ens7 external + ens8 internal) on each node. cneinstall later rediscovers the tagged subnets to wire the BNKGateway CR's listener networks.",
+      "module": "modules/eks-cluster-hp-nodes",
+      "version": "0.2.0-alpha",
+      "depends_on": ["cluster-create"],
+      "inputs": {
+        "aws_access_key_id": "${aws_access_key_id}",
+        "aws_secret_access_key": "${aws_secret_access_key}",
+        "aws_session_token": "${aws_session_token}",
+        "aws_region": "${aws_region}",
+        "instance_type": "${hp_instance_type}",
+        "node_count_per_az": "${hp_node_count_per_az}",
+        "node_disk_size_gb": "${hp_node_disk_size_gb}"
       }
     },
     {
@@ -282,7 +325,7 @@
       "description": "Create BNK namespaces, FAR image pull secrets, and download the BNK manifest.",
       "module": "modules/eks-cluster-install-bnk-prereqs",
       "version": "1.0.0",
-      "depends_on": ["cluster-create"],
+      "depends_on": ["cluster-create", "hp-nodes"],
       "inputs": {
         "cne_pull_secret": "${cne_pull_secret}",
         "operator_namespace": "${operator_namespace}",

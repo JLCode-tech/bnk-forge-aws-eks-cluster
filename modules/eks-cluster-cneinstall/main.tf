@@ -54,6 +54,26 @@ data "aws_subnet" "tmm_external_discovered" {
   id       = each.value
 }
 
+# Parallel discovery for the TMM-internal half of the 3-interface TMM model.
+# Used today only for diagnostics + the discovered_tmm_internal_subnets_by_az
+# output. A future NAD-provisioning module will consume it to create the
+# ens8-ipvlan-l2 NetworkAttachmentDefinition automatically.
+
+data "aws_subnets" "tmm_internal_discovered" {
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
+  tags = {
+    "f5-bnk-role" = "tmm-internal"
+  }
+}
+
+data "aws_subnet" "tmm_internal_discovered" {
+  for_each = toset(data.aws_subnets.tmm_internal_discovered.ids)
+  id       = each.value
+}
+
 # =============================================================================
 # Forge-injected kubeconfig (used by kubectl in local-exec provisioners)
 # =============================================================================
@@ -104,6 +124,20 @@ locals {
     ? local.discovered_tmm_external_subnets_by_az
     : var.tmm_external_subnets_by_az
   )
+
+  # Discovered tmm-internal subnets — diagnostic output only for now. Future
+  # NAD-provisioning module will consume this to create ens8-ipvlan-l2.
+  discovered_tmm_internal_by_az_map = {
+    for s in data.aws_subnet.tmm_internal_discovered :
+    s.availability_zone => { cidr = s.cidr_block, subnet_id = s.id }...
+  }
+
+  discovered_tmm_internal_subnets_by_az = [
+    for az, subnets in local.discovered_tmm_internal_by_az_map : {
+      name    = az
+      subnets = subnets
+    }
+  ]
 
   vip_cidr_set                 = var.vip_cidr != ""
   tmm_external_subnets_present = length(local.effective_tmm_external_subnets_by_az) > 0

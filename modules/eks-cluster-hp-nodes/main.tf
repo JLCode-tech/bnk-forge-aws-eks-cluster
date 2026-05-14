@@ -2,22 +2,36 @@
 # eks-cluster-hp-nodes
 # =============================================================================
 # Adds a dedicated high-performance EKS managed node group to an existing
-# cluster for hosting TMM data-plane pods. What this module does:
+# cluster for hosting TMM data-plane pods. Implements the generic 3-interface
+# TMM model: CNI (ens5) + external (ens7) + internal (ens8).
 #
-#   1. Creates per-AZ TMM subnets in the cluster's VPC (tagged
-#      f5-bnk-role=tmm-external so cneinstall auto-discovers them).
-#   2. Creates a node IAM role with standard EKS worker permissions PLUS
-#      ec2:CreateNetworkInterface/AttachNetworkInterface/CreateTags so the
-#      bootstrap user-data can self-attach a secondary ENI.
-#   3. Creates a launch template (IMDSv2-required, EBS-encrypted, custom
-#      user-data) that wraps the EKS bootstrap with a pre-step that creates
-#      and attaches the secondary ENI from the AZ-matching TMM subnet.
+# What this module does:
+#
+#   1. Creates per-AZ TMM-external subnets (tagged f5-bnk-role=tmm-external)
+#      and per-AZ TMM-internal subnets (tagged f5-bnk-role=tmm-internal). The
+#      cneinstall module rediscovers these at apply time to wire the
+#      BNKGateway CR's listener networks.
+#   2. Creates a node IAM role with standard EKS worker permissions plus
+#      scoped ec2:CreateNetworkInterface / AttachNetworkInterface / CreateTags
+#      so the bootstrap user-data can self-attach the two secondary ENIs.
+#   3. Creates a launch template (IMDSv2-required, EBS-encrypted) with custom
+#      user-data that wraps EKS's own bootstrap: at first boot the script
+#      creates + attaches two secondary ENIs, one in the AZ-matching TMM-
+#      external subnet (device_index 2 → ens7) and one in the AZ-matching
+#      TMM-internal subnet (device_index 3 → ens8), each tagged
+#      node.k8s.amazonaws.com/no_manage=true so VPC CNI ignores them.
 #   4. Creates an EKS managed node group using that launch template, with
-#      node label app=f5-tmm so FLO schedules TMM pods here.
+#      node label app=f5-tmm so FLO schedules TMM pods here, and optional
+#      taints for full pool dedication.
 #
 # Works for both blueprints (cluster-create greenfield and cluster-register
 # brownfield) — only requires the upstream module's vpc_id, vpc_cidr,
 # private_subnet_ids, availability_zones, and eks_cluster_name outputs.
+#
+# NetworkAttachmentDefinitions for ens7 and ens8 are a manual prerequisite
+# until a dedicated NAD-provisioning module exists. The variant blueprints
+# reference these by name (ens7-ipvlan-l2 + ens8-ipvlan-l2) in the
+# CNEInstance CR's networkAttachments field.
 
 provider "aws" {
   region     = var.aws_region
@@ -35,10 +49,16 @@ data "aws_partition" "current" {}
 locals {
   az_count = length(var.availability_zones)
 
-  # TMM subnet CIDRs — explicit override OR auto-carve from vpc_cidr.
-  tmm_subnet_cidrs = length(var.tmm_subnet_cidrs) > 0 ? var.tmm_subnet_cidrs : [
+  # TMM-external subnet CIDRs (explicit override OR auto-carve).
+  tmm_external_subnet_cidrs = length(var.tmm_external_subnet_cidrs) > 0 ? var.tmm_external_subnet_cidrs : [
     for i in range(local.az_count) :
-    cidrsubnet(var.vpc_cidr, var.tmm_subnet_newbits, var.tmm_subnet_index_offset + i)
+    cidrsubnet(var.vpc_cidr, var.tmm_external_subnet_newbits, var.tmm_external_subnet_index_offset + i)
+  ]
+
+  # TMM-internal subnet CIDRs (explicit override OR auto-carve).
+  tmm_internal_subnet_cidrs = length(var.tmm_internal_subnet_cidrs) > 0 ? var.tmm_internal_subnet_cidrs : [
+    for i in range(local.az_count) :
+    cidrsubnet(var.vpc_cidr, var.tmm_internal_subnet_newbits, var.tmm_internal_subnet_index_offset + i)
   ]
 
   common_tags = merge(var.tags, {
@@ -46,7 +66,7 @@ locals {
     "bnk-forge:cluster" = var.eks_cluster_name
   })
 
-  tmm_subnet_tags = merge(
+  tmm_external_subnet_tags = merge(
     local.common_tags,
     {
       "kubernetes.io/cluster/${var.eks_cluster_name}" = "shared"
@@ -54,26 +74,55 @@ locals {
     var.tag_subnets_for_tmm ? { "f5-bnk-role" = "tmm-external" } : {}
   )
 
-  # Bash-case map rendered into the user-data template.
-  tmm_subnet_by_az = {
+  tmm_internal_subnet_tags = merge(
+    local.common_tags,
+    {
+      "kubernetes.io/cluster/${var.eks_cluster_name}" = "shared"
+    },
+    var.tag_subnets_for_tmm ? { "f5-bnk-role" = "tmm-internal" } : {}
+  )
+
+  # AZ → subnet ID maps rendered into the user-data template.
+  tmm_external_subnet_by_az = {
     for i, az in var.availability_zones :
-    az => aws_subnet.tmm[i].id
+    az => aws_subnet.tmm_external[i].id
+  }
+
+  tmm_internal_subnet_by_az = {
+    for i, az in var.availability_zones :
+    az => aws_subnet.tmm_internal[i].id
   }
 }
 
 # =============================================================================
-# TMM subnets — one per AZ, used only for the secondary ENI on HP nodes.
+# TMM-external subnets — one per AZ (client-facing data plane)
 # =============================================================================
 
-resource "aws_subnet" "tmm" {
+resource "aws_subnet" "tmm_external" {
   count                   = local.az_count
   vpc_id                  = var.vpc_id
-  cidr_block              = local.tmm_subnet_cidrs[count.index]
+  cidr_block              = local.tmm_external_subnet_cidrs[count.index]
   availability_zone       = var.availability_zones[count.index]
   map_public_ip_on_launch = false
 
-  tags = merge(local.tmm_subnet_tags, {
-    Name = "${var.eks_cluster_name}-tmm-${var.availability_zones[count.index]}"
+  tags = merge(local.tmm_external_subnet_tags, {
+    Name = "${var.eks_cluster_name}-tmm-ext-${var.availability_zones[count.index]}"
+  })
+}
+
+# =============================================================================
+# TMM-internal subnets — one per AZ (backend/origin data plane)
+# =============================================================================
+
+resource "aws_subnet" "tmm_internal" {
+  count                   = local.az_count
+  vpc_id                  = var.vpc_id
+  cidr_block              = local.tmm_internal_subnet_cidrs[count.index]
+  availability_zone       = var.availability_zones[count.index]
+  map_public_ip_on_launch = false
+
+  tags = merge(local.tmm_internal_subnet_tags, {
+    Name = "${var.eks_cluster_name}-tmm-int-${var.availability_zones[count.index]}"
   })
 }
 
@@ -112,11 +161,11 @@ resource "aws_iam_role_policy_attachment" "hp_node_registry" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
-# Inline policy: bootstrap script needs to create + attach an ENI in the TMM
-# subnets and tag it. Scoped narrowly to ENI-related actions.
+# Inline policy: bootstrap script needs to create + attach two ENIs and tag
+# them. Scoped to ENI actions only.
 data "aws_iam_policy_document" "hp_node_eni" {
   statement {
-    sid = "ManageSecondaryENI"
+    sid = "ManageSecondaryENIs"
     actions = [
       "ec2:CreateNetworkInterface",
       "ec2:AttachNetworkInterface",
@@ -141,24 +190,23 @@ resource "aws_iam_role_policy" "hp_node_eni" {
 }
 
 # =============================================================================
-# Launch template — bakes IMDSv2, EBS encryption, and the secondary-ENI
-# bootstrap user-data into the HP node image.
+# Launch template — IMDSv2, EBS encryption, dual-ENI bootstrap user-data
 # =============================================================================
 
 locals {
   userdata_script = templatefile(
     "${path.module}/manifests/launch-template-userdata.sh.tftpl",
     {
-      eks_cluster_name           = var.eks_cluster_name
-      tmm_subnet_by_az           = local.tmm_subnet_by_az
-      secondary_eni_device_index = var.secondary_eni_device_index
-      additional_ips_per_eni     = var.additional_ips_per_eni
+      eks_cluster_name          = var.eks_cluster_name
+      tmm_external_subnet_by_az = local.tmm_external_subnet_by_az
+      tmm_internal_subnet_by_az = local.tmm_internal_subnet_by_az
+      external_eni_device_index = var.external_eni_device_index
+      internal_eni_device_index = var.internal_eni_device_index
+      additional_ips_per_eni    = var.additional_ips_per_eni
     }
   )
 
   # MIME multipart so EKS's own bootstrap runs after our pre-step.
-  # AL2023 images expect this format; EKS managed node groups inject their
-  # own boot.sh as a separate MIME part automatically.
   userdata_mime = <<-EOT
     MIME-Version: 1.0
     Content-Type: multipart/mixed; boundary="==BOUNDARY=="
@@ -173,7 +221,7 @@ locals {
 
 resource "aws_launch_template" "hp" {
   name_prefix = "${var.eks_cluster_name}-hp-"
-  description = "BNK HP TMM nodes — IMDSv2, EBS-encrypted, secondary ENI bootstrap."
+  description = "BNK HP TMM nodes — IMDSv2, EBS-encrypted, dual secondary ENI bootstrap (external + internal)."
 
   block_device_mappings {
     device_name = "/dev/xvda"
@@ -217,7 +265,7 @@ resource "aws_launch_template" "hp" {
 }
 
 # =============================================================================
-# EKS managed node group — uses the launch template above.
+# EKS managed node group
 # =============================================================================
 
 resource "aws_eks_node_group" "hp" {
@@ -266,6 +314,7 @@ resource "aws_eks_node_group" "hp" {
     aws_iam_role_policy_attachment.hp_node_cni,
     aws_iam_role_policy_attachment.hp_node_registry,
     aws_iam_role_policy.hp_node_eni,
-    aws_subnet.tmm,
+    aws_subnet.tmm_external,
+    aws_subnet.tmm_internal,
   ]
 }

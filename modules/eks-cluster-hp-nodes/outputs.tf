@@ -1,30 +1,70 @@
-output "tmm_subnet_ids" {
-  description = "TMM subnet IDs (one per AZ), in availability_zones order."
-  value       = aws_subnet.tmm[*].id
+# -----------------------------------------------------------------------------
+# TMM-external subnet outputs
+# -----------------------------------------------------------------------------
+
+output "tmm_external_subnet_ids" {
+  description = "TMM-external subnet IDs (one per AZ), in availability_zones order."
+  value       = aws_subnet.tmm_external[*].id
 }
 
-output "tmm_subnet_ids_by_az" {
-  description = "AZ → TMM subnet ID map. Useful for cross-referencing with cluster-register / cluster-create outputs."
-  value       = local.tmm_subnet_by_az
+output "tmm_external_subnet_ids_by_az" {
+  description = "AZ → TMM-external subnet ID map."
+  value       = local.tmm_external_subnet_by_az
 }
 
-output "tmm_subnet_cidrs" {
-  description = "TMM subnet CIDRs that were created (one per AZ)."
-  value       = local.tmm_subnet_cidrs
+output "tmm_external_subnet_cidrs" {
+  description = "TMM-external subnet CIDRs that were created (one per AZ)."
+  value       = local.tmm_external_subnet_cidrs
 }
 
 output "tmm_external_subnets_by_az" {
-  description = "AZ → TMM external subnets, in the same shape cluster-register / cluster-create emit. Override the cneinstall input of the same name when explicitly chaining HP-nodes ahead of cneinstall to use these subnets instead of the upstream provisioner's tagged subnets."
+  description = "AZ → TMM-external subnets, in the same shape cluster-register / cluster-create emit. cneinstall rediscovers the same set internally at apply time via the f5-bnk-role=tmm-external tag, so this output is mainly for diagnostics."
   value = [
     for i, az in var.availability_zones : {
       name = az
       subnets = [{
-        cidr      = local.tmm_subnet_cidrs[i]
-        subnet_id = aws_subnet.tmm[i].id
+        cidr      = local.tmm_external_subnet_cidrs[i]
+        subnet_id = aws_subnet.tmm_external[i].id
       }]
     }
   ]
 }
+
+# -----------------------------------------------------------------------------
+# TMM-internal subnet outputs
+# -----------------------------------------------------------------------------
+
+output "tmm_internal_subnet_ids" {
+  description = "TMM-internal subnet IDs (one per AZ), in availability_zones order."
+  value       = aws_subnet.tmm_internal[*].id
+}
+
+output "tmm_internal_subnet_ids_by_az" {
+  description = "AZ → TMM-internal subnet ID map."
+  value       = local.tmm_internal_subnet_by_az
+}
+
+output "tmm_internal_subnet_cidrs" {
+  description = "TMM-internal subnet CIDRs that were created (one per AZ)."
+  value       = local.tmm_internal_subnet_cidrs
+}
+
+output "tmm_internal_subnets_by_az" {
+  description = "AZ → TMM-internal subnets, structured. cneinstall rediscovers the same set internally at apply time via the f5-bnk-role=tmm-internal tag."
+  value = [
+    for i, az in var.availability_zones : {
+      name = az
+      subnets = [{
+        cidr      = local.tmm_internal_subnet_cidrs[i]
+        subnet_id = aws_subnet.tmm_internal[i].id
+      }]
+    }
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Node group + launch template
+# -----------------------------------------------------------------------------
 
 output "hp_node_group_arn" {
   description = "ARN of the HP managed node group. Empty when node_count_per_az = 0."
@@ -52,6 +92,6 @@ output "hp_node_count" {
 }
 
 output "node_label_app_value" {
-  description = "Value applied to the 'app' label on HP nodes. cneinstall uses 'app=f5-tmm' to schedule TMM pods — keep this value unless you've overridden the corresponding match in your CNEInstance CR."
+  description = "Value applied to the 'app' label on HP nodes. FLO uses app=f5-tmm to schedule TMM pods — keep the default unless you've changed the CNEInstance CR's match selector."
   value       = var.node_label_app
 }
