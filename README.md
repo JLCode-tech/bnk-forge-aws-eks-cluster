@@ -34,7 +34,7 @@ Implementation status across the AWS-specific deployment chain:
 | [`modules/eks-cluster-install-cert-manager`](./modules/eks-cluster-install-cert-manager) | Jetstack cert-manager install. | Implemented (vendored) |
 | [`modules/eks-cluster-install-cert-issuer`](./modules/eks-cluster-install-cert-issuer) | BNK self-signed CA + ClusterIssuer. | Implemented (vendored) |
 | [`modules/eks-cluster-install-flo`](./modules/eks-cluster-install-flo) | F5 Lifecycle Operator install via Helm with AWS-tuned values (containerPlatform=AWS, fluentbit disabled, IPAM operator in default ns). Registers BNK CRDs. | Implemented |
-| [`modules/eks-cluster-cneinstall`](./modules/eks-cluster-cneinstall) | CNEInstance CR with AWS production defaults (CLOUD_PROVIDER=aws, TMM_DEFAULT_MTU=9000, PAL_CPU_SET=0,2), cloud-network-mapping ConfigMap, F5BnkGateway chassis CR, and IRSA for the CNE controller. | Implemented |
+| [`modules/eks-cluster-cneinstall`](./modules/eks-cluster-cneinstall) | CNEInstance CR with AWS production defaults (CLOUD_PROVIDER=aws, TMM_DEFAULT_MTU=9000, PAL_CPU_SET=0,2), cloud-network-mapping ConfigMap, BNKGateway CR (kind: F5BnkGateway) for VIP IPAM, and IRSA for the CNE controller. | Implemented |
 | `modules/eks-cluster-license` | BNK License CR. | Not yet implemented |
 | `modules/eks-cluster-create` | VPC + subnets + EKS cluster + node groups (provisioning, alternate to register). | Not yet implemented |
 

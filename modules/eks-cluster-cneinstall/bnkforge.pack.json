@@ -5,7 +5,7 @@
     "path": "modules/eks-cluster-cneinstall",
     "version": "1.0.0",
     "category": "bnk",
-    "description": "Apply the CNEInstance CR on AWS EKS, lay down the cloud-network-mapping ConfigMap and (optionally) the F5BnkGateway chassis CR, and wire AWS IRSA for the CNE controller (IAM role + OIDC trust + SA annotation + rollout-restart).",
+    "description": "Apply the CNEInstance CR on AWS EKS, lay down the cloud-network-mapping ConfigMap and (optionally) the BNKGateway CR (kind: F5BnkGateway) for VIP allocation, and wire AWS IRSA for the CNE controller (IAM role + OIDC trust + SA annotation + rollout-restart).",
     "provider": "aws",
     "supported_platforms": ["aws_eks"],
     "tags": ["aws", "eks", "bnk", "cneinstance", "irsa", "f5"]
@@ -241,21 +241,21 @@
       {
         "name": "vip_cidr",
         "type": "string",
-        "description": "CIDR for BNK Gateway VIP allocation. Module derives the F5BnkGateway chassis CR's start_address (cidrhost +1) and end_address (cidrhost -2) from this. Empty = skip chassis CR (the controller will then ignore Gateway/HTTPRoute CRs). Pick a CIDR carved from the cluster VPC; e.g. for a 192.168.0.0/16 VPC, '192.168.250.0/24' is a typical choice.",
+        "description": "CIDR for BNK Gateway VIP allocation. Module derives the BNKGateway CR's start_address (cidrhost +1) and end_address (cidrhost -2) from this. Empty = skip the CR (the controller will then ignore Gateway/HTTPRoute CRs). Pick a CIDR carved from the cluster VPC or from a TMM external AZ subnet; e.g. for a 192.168.0.0/16 VPC, '192.168.250.0/24' is a typical choice.",
         "default": "",
         "source": "user"
       },
       {
-        "name": "chassis_name",
+        "name": "bnk_gateway_name",
         "type": "string",
-        "description": "Name of the F5BnkGateway chassis CR.",
-        "default": "bnk-gateway-chassis",
+        "description": "Name of the BNKGateway CR (kind: F5BnkGateway).",
+        "default": "bnk-gateway",
         "source": "user"
       },
       {
         "name": "vip_network_name",
         "type": "string",
-        "description": "Logical name for the VIP listener network in the F5BnkGateway chassis CR.",
+        "description": "Logical name for the VIP listener network in the BNKGateway CR.",
         "default": "default",
         "source": "user"
       }
@@ -279,9 +279,9 @@
         "description": "True if the cloud-network-mapping ConfigMap was applied."
       },
       {
-        "name": "bnk_gateway_chassis_applied",
+        "name": "bnk_gateway_applied",
         "type": "boolean",
-        "description": "True if the F5BnkGateway chassis CR was applied (i.e. vip_cidr was non-empty)."
+        "description": "True if the BNKGateway CR (kind: F5BnkGateway) was applied (i.e. vip_cidr was non-empty)."
       },
       {
         "name": "effective_tmm_replicas",
