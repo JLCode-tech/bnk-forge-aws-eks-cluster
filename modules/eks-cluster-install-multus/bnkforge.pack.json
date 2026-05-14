@@ -42,7 +42,7 @@
         "type": "string",
         "description": "Multus release tag.",
         "source": "user",
-        "default": "v4.1.0"
+        "default": "v4.2.4"
       },
       {
         "name": "multus_manifest_url",

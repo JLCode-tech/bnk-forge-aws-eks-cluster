@@ -12,7 +12,7 @@ This module installs Multus and **only** Multus. It deliberately knows nothing a
 
 ## How it installs
 
-1. `kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/<version>/deployments/multus-daemonset.yml` (default version `v4.1.0`, URL overridable for air-gapped envs).
+1. `kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/<version>/deployments/multus-daemonset.yml` (default version `v4.2.4`, URL overridable for air-gapped envs).
 2. `kubectl wait --for=condition=Established crd/network-attachment-definitions.k8s.cni.cncf.io` — ensures the CRD is ready before any downstream module tries to create NAD resources.
 3. `kubectl rollout status ds/kube-multus-ds -n kube-system` — ensures the CNI binary is on every node before any pod needing secondary networks schedules.
 
@@ -33,7 +33,7 @@ Downstream NAD modules should set their `depends_on` against `install-multus.mul
 | Name | Default | Description |
 |---|---|---|
 | `install_multus` | `true` | Set false if your cluster already has Multus from another source. |
-| `multus_version` | `v4.1.0` | Release tag — URL is built from this. |
+| `multus_version` | `v4.2.4` | Release tag — URL is built from this. |
 | `multus_manifest_url` | `""` | Explicit override URL for air-gapped / mirrored envs. |
 | `multus_crd_wait_timeout` | `120s` | `kubectl wait` timeout for the CRD to become `Established`. |
 | `multus_rollout_wait_timeout` | `180s` | `kubectl rollout status` timeout for the DaemonSet. |

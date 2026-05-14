@@ -23,9 +23,9 @@ variable "install_multus" {
 }
 
 variable "multus_version" {
-  description = "Multus release tag. The full manifest URL is built as github.com/k8snetworkplumbingwg/multus-cni/<version>/deployments/multus-daemonset.yml. Default tracks a tested stable release."
+  description = "Multus release tag. The full manifest URL is built as github.com/k8snetworkplumbingwg/multus-cni/<version>/deployments/multus-daemonset.yml. Default tracks the most recent stable release at module-publish time."
   type        = string
-  default     = "v4.1.0"
+  default     = "v4.2.4"
 }
 
 variable "multus_manifest_url" {
