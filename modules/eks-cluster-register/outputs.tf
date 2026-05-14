@@ -95,6 +95,11 @@ output "subnet_ids" {
   value       = data.aws_eks_cluster.existing.vpc_config[0].subnet_ids
 }
 
+output "private_subnet_ids" {
+  description = "Subnets where downstream node groups (e.g. hp-nodes) should place their primary ENI. For brownfield EKS we don't actually know which of the cluster's subnets are private — AWS doesn't tag them. We pass through all the subnets EKS itself is using (vpc_config.subnet_ids), with the understanding that the user wouldn't have attached public subnets to the cluster they want BNK on. The cluster-create module has a richer view and exposes only true private subnets under this same output name."
+  value       = data.aws_eks_cluster.existing.vpc_config[0].subnet_ids
+}
+
 output "cloud_az_subnet_mappings" {
   description = <<-EOT
     AZ → subnets list, structured for direct consumption by the

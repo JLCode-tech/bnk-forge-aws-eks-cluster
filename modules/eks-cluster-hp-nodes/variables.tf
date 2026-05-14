@@ -68,9 +68,14 @@ variable "tmm_external_subnet_newbits" {
 }
 
 variable "tmm_external_subnet_index_offset" {
-  description = "Starting subnet index for cidrsubnet() when auto-carving TMM-external subnets. Default 200 leaves clear of worker subnets at offsets 0..N."
+  description = "Starting subnet index for cidrsubnet() when auto-carving TMM-external subnets. Default 200 leaves clear of worker subnets at offsets 0..N. NOTE: offset + AZ count must fit within 2^newbits — fine for /16 VPC with default newbits=8 (256 slots), but a /20 VPC only has 16 slots and would error. Override explicitly via tmm_external_subnet_cidrs if your VPC is tight."
   type        = number
   default     = 200
+
+  validation {
+    condition     = var.tmm_external_subnet_index_offset >= 0 && var.tmm_external_subnet_index_offset < pow(2, var.tmm_external_subnet_newbits)
+    error_message = "tmm_external_subnet_index_offset must be in [0, 2^tmm_external_subnet_newbits). Reduce the offset (or set tmm_external_subnet_cidrs explicitly) when using a small VPC + large newbits."
+  }
 }
 
 # =============================================================================
@@ -90,9 +95,14 @@ variable "tmm_internal_subnet_newbits" {
 }
 
 variable "tmm_internal_subnet_index_offset" {
-  description = "Starting subnet index for cidrsubnet() when auto-carving TMM-internal subnets. Default 210 sits 10 indices clear of the external default (200) so the two ranges never overlap."
+  description = "Starting subnet index for cidrsubnet() when auto-carving TMM-internal subnets. Default 210 sits 10 indices clear of the external default (200) so the two ranges never overlap. Must fit within 2^tmm_internal_subnet_newbits (256 slots at default newbits=8) — override via tmm_internal_subnet_cidrs for small VPCs."
   type        = number
   default     = 210
+
+  validation {
+    condition     = var.tmm_internal_subnet_index_offset >= 0 && var.tmm_internal_subnet_index_offset < pow(2, var.tmm_internal_subnet_newbits)
+    error_message = "tmm_internal_subnet_index_offset must be in [0, 2^tmm_internal_subnet_newbits)."
+  }
 }
 
 # =============================================================================
