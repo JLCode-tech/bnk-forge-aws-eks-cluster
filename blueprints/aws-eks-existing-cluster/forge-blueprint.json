@@ -2,9 +2,9 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-existing-cluster",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "name": "AWS EKS Existing Cluster",
-    "description": "Adopt an existing AWS EKS cluster and lay down the BNK control plane: namespaces + FAR pull secrets + manifest, cert-manager, BNK cert issuer, F5 Lifecycle Operator (FLO), and the CNEInstance (with AWS IRSA, cloud-network-mapping ConfigMap, and optional BNKGateway CR for VIP IPAM). License step lands in the next revision."
+    "description": "Adopt an existing AWS EKS cluster and lay down the BNK control plane: namespaces + FAR pull secrets + manifest, cert-manager, BNK cert issuer, F5 Lifecycle Operator (FLO) — which carries the BNK license JWT and activates the licence as part of its Helm install — and the CNEInstance (with AWS IRSA, cloud-network-mapping ConfigMap, and optional BNKGateway CR for VIP IPAM)."
   },
   "bnk_version": "2.2",
   "compatibility": {
@@ -32,7 +32,7 @@
   "estimated_time": "15-25 minutes (current chain; full BNK install longer)",
   "estimated_cost": "AWS usage-based",
   "difficulty": "intermediate",
-  "maturity": "preview",
+  "maturity": "beta",
   "tags": ["aws", "eks", "kubernetes", "cluster", "register", "cert-manager", "bnk-prereqs", "flo", "cneinstance", "irsa"],
   "outcomes": [
     "An existing AWS EKS cluster is referenced by name and adopted into BNK Forge",

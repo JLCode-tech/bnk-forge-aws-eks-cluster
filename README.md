@@ -20,8 +20,8 @@ After apply succeeds, Forge auto-registers your EKS cluster in its Kubernetes in
 
 | Blueprint | When to use | Status |
 |---|---|---|
-| [`blueprints/aws-eks-existing-cluster`](./blueprints/aws-eks-existing-cluster) | You already have an EKS cluster (provisioned by Terraform, the AWS console, eksctl, etc.) and want Forge to adopt it and lay down the BNK stack on top. | Implemented through CNEInstance + IRSA; License pending (`maturity: preview`) |
-| [`blueprints/aws-eks-cluster-create`](./blueprints/aws-eks-cluster-create) | You want Forge to provision a new EKS cluster end-to-end (VPC, subnets, node group, BNK stack) using the `terraform-aws-modules` community baseline. | Implemented through CNEInstance + IRSA; License pending (`maturity: beta`) |
+| [`blueprints/aws-eks-existing-cluster`](./blueprints/aws-eks-existing-cluster) | You already have an EKS cluster (provisioned by Terraform, the AWS console, eksctl, etc.) and want Forge to adopt it and lay down the BNK stack on top. | Implemented end-to-end (`maturity: beta`) — moves to 1.0.0 after integration testing |
+| [`blueprints/aws-eks-cluster-create`](./blueprints/aws-eks-cluster-create) | You want Forge to provision a new EKS cluster end-to-end (VPC, subnets, node group, BNK stack) using the `terraform-aws-modules` community baseline. | Implemented end-to-end (`maturity: beta`) — moves to 1.0.0 after integration testing |
 
 ## Modules
 
@@ -33,9 +33,8 @@ Implementation status across the AWS-specific deployment chain:
 | [`modules/eks-cluster-install-bnk-prereqs`](./modules/eks-cluster-install-bnk-prereqs) | Namespaces, FAR pull secrets, BNK manifest download. | Implemented (vendored from `bnk-forge-catalog-shared`) |
 | [`modules/eks-cluster-install-cert-manager`](./modules/eks-cluster-install-cert-manager) | Jetstack cert-manager install. | Implemented (vendored) |
 | [`modules/eks-cluster-install-cert-issuer`](./modules/eks-cluster-install-cert-issuer) | BNK self-signed CA + ClusterIssuer. | Implemented (vendored) |
-| [`modules/eks-cluster-install-flo`](./modules/eks-cluster-install-flo) | F5 Lifecycle Operator install via Helm with AWS-tuned values (containerPlatform=AWS, fluentbit disabled, IPAM operator in default ns). Registers BNK CRDs. | Implemented |
+| [`modules/eks-cluster-install-flo`](./modules/eks-cluster-install-flo) | F5 Lifecycle Operator install via Helm with AWS-tuned values (containerPlatform=AWS, fluentbit disabled, IPAM operator in default ns). Registers BNK CRDs and carries the BNK license block — license activation happens here, no separate License CR. | Implemented |
 | [`modules/eks-cluster-cneinstall`](./modules/eks-cluster-cneinstall) | CNEInstance CR with AWS production defaults (CLOUD_PROVIDER=aws, TMM_DEFAULT_MTU=9000, PAL_CPU_SET=0,2), cloud-network-mapping ConfigMap, BNKGateway CR (kind: F5BnkGateway) for VIP IPAM, and IRSA for the CNE controller. | Implemented |
-| `modules/eks-cluster-license` | BNK License CR. | Not yet implemented |
 | [`modules/eks-cluster-create`](./modules/eks-cluster-create) | VPC + subnets + EKS cluster + managed node group (alternate to register). Wraps `terraform-aws-modules/vpc/aws` and `terraform-aws-modules/eks/aws` so production hardening (IMDSv2, EBS encryption, OIDC, control-plane logging) comes from a widely-audited community baseline. | Implemented (beta) |
 
 ## AWS credentials
