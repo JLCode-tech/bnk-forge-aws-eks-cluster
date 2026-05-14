@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "layer": "application",
     "category": "bnk",
-    "description": "Apply the CNEInstance CR on AWS EKS plus the AWS-specific cloud-network-mapping ConfigMap and (optional) F5BnkGateway chassis CR, and wire AWS IRSA for the CNE controller (IAM role + OIDC trust + SA annotation + rollout-restart).",
+    "description": "Apply the CNEInstance CR on AWS EKS plus the AWS-specific cloud-network-mapping ConfigMap and (optional) BNKGateway CR (kind: F5BnkGateway, IPAM), and wire AWS IRSA for the CNE controller (IAM role + OIDC trust + SA annotation + rollout-restart).",
     "cloud_specific": true,
     "supported_platforms": ["aws_eks"]
   },
@@ -214,21 +214,21 @@
       {
         "name": "vip_cidr",
         "type": "string",
-        "description": "CIDR for BNK Gateway VIPs. Module derives chassis CR start/end addresses from this. Empty = skip chassis CR.",
+        "description": "CIDR for BNK Gateway VIPs. Module derives the BNKGateway CR start/end addresses from this. Empty = skip the CR.",
         "default": "",
         "source": "user"
       },
       {
-        "name": "chassis_name",
+        "name": "bnk_gateway_name",
         "type": "string",
-        "description": "F5BnkGateway chassis CR name.",
-        "default": "bnk-gateway-chassis",
+        "description": "BNKGateway CR (kind: F5BnkGateway) name.",
+        "default": "bnk-gateway",
         "source": "user"
       },
       {
         "name": "vip_network_name",
         "type": "string",
-        "description": "Logical name for the VIP listener network in the chassis CR.",
+        "description": "Logical name for the VIP listener network in the BNKGateway CR.",
         "default": "default",
         "source": "user"
       }

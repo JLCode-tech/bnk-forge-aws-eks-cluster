@@ -4,7 +4,7 @@
     "id": "aws-eks-existing-cluster",
     "version": "0.4.0",
     "name": "AWS EKS Existing Cluster",
-    "description": "Adopt an existing AWS EKS cluster and lay down the BNK control plane: namespaces + FAR pull secrets + manifest, cert-manager, BNK cert issuer, F5 Lifecycle Operator (FLO), and the CNEInstance (with AWS IRSA, cloud-network-mapping ConfigMap, and optional F5BnkGateway chassis). License step lands in the next revision."
+    "description": "Adopt an existing AWS EKS cluster and lay down the BNK control plane: namespaces + FAR pull secrets + manifest, cert-manager, BNK cert issuer, F5 Lifecycle Operator (FLO), and the CNEInstance (with AWS IRSA, cloud-network-mapping ConfigMap, and optional BNKGateway CR for VIP IPAM). License step lands in the next revision."
   },
   "bnk_version": "2.2",
   "compatibility": {
@@ -42,7 +42,7 @@
     "F5 Lifecycle Operator (FLO) is installed with AWS-tuned defaults; BNK CRDs are registered",
     "CNEInstance is applied with AWS-specific cneController env vars; FLO rolls out CWC, DSSM, OTEL, RabbitMQ, TMM, IPAM operator",
     "AWS IRSA is wired for the CNE controller — IAM role + OIDC trust + SA annotation",
-    "(Optional) cloud-network-mapping ConfigMap and F5BnkGateway chassis CR are applied when their inputs are provided"
+    "(Optional) cloud-network-mapping ConfigMap and BNKGateway CR (kind: F5BnkGateway) are applied when their inputs are provided"
   ],
   "prerequisites": [
     {
@@ -201,7 +201,7 @@
       {
         "name": "vip_cidr",
         "type": "string",
-        "description": "CIDR for BNK Gateway VIP allocation. Module derives the F5BnkGateway chassis CR start/end addresses from this. Empty = skip chassis CR (controller will then ignore Gateway/HTTPRoute CRs). Pick a CIDR carved from your cluster VPC; e.g. for a 192.168.0.0/16 VPC, '192.168.250.0/24' is typical.",
+        "description": "CIDR for BNK Gateway VIP allocation. Module derives the BNKGateway CR (kind: F5BnkGateway) start/end addresses from this. Empty = skip the CR (controller will then ignore Gateway/HTTPRoute CRs). Pick a CIDR carved from your cluster VPC or from a TMM external AZ subnet; e.g. for a 192.168.0.0/16 VPC, '192.168.250.0/24' is typical.",
         "default": "",
         "order": 81
       }
@@ -280,7 +280,7 @@
     {
       "id": "cneinstall",
       "name": "CNEInstance + IRSA",
-      "description": "Apply the CNEInstance CR with AWS production defaults, the cloud-network-mapping ConfigMap, the F5BnkGateway chassis CR (when configured), and wire AWS IRSA for the CNE controller (IAM role + SA annotation + rollout-restart).",
+      "description": "Apply the CNEInstance CR with AWS production defaults, the cloud-network-mapping ConfigMap, the BNKGateway CR (kind: F5BnkGateway) for VIP IPAM (when vip_cidr is set), and wire AWS IRSA for the CNE controller (IAM role + SA annotation + rollout-restart).",
       "module": "modules/eks-cluster-cneinstall",
       "version": "1.0.0",
       "depends_on": ["flo"],

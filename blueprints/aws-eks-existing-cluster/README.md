@@ -11,7 +11,7 @@ Adopt an existing AWS EKS cluster into BNK Forge and lay down the shared BNK k8s
 | 3 | `eks-cluster-install-cert-manager` — install Jetstack cert-manager | Implemented (vendored) |
 | 4 | `eks-cluster-install-cert-issuer` — BNK CA + ClusterIssuer | Implemented (vendored) |
 | 5 | `eks-cluster-install-flo` — install F5 Lifecycle Operator via Helm (AWS-tuned values) | Implemented |
-| 6 | `eks-cluster-cneinstall` — CNEInstance CR + cloud-network-mapping + F5BnkGateway chassis + AWS IRSA | Implemented |
+| 6 | `eks-cluster-cneinstall` — CNEInstance CR + cloud-network-mapping + BNKGateway CR + AWS IRSA | Implemented |
 | 7 | `eks-cluster-license` — apply the BNK License CR | Not yet implemented |
 
 Current revision: `version: 0.4.0`, `maturity: preview`. The License module is the last remaining step — once that lands this blueprint will deploy BNK end-to-end onto an existing EKS cluster.
@@ -37,7 +37,7 @@ Current revision: `version: 0.4.0`, `maturity: preview`. The License module is t
 | `tmm_replicas` | User | No | Number of TMM replicas. Default `0` = auto: `min(cluster AZ count, worker node count)`. |
 | `watch_namespaces` | User | No | Namespaces the CNE controller watches. Default `["All"]`. |
 | `network_attachments` | User | No | NAD names attached to TMM. Default `["ens7-ipvlan-l2"]`. |
-| `vip_cidr` | User | **For Gateway-API traffic** | CIDR carved from your VPC for BNK Gateway VIPs (e.g. `192.168.250.0/24`). Empty = skip chassis CR; required if you want Gateway/HTTPRoute traffic to flow. |
+| `vip_cidr` | User | **For Gateway-API traffic** | CIDR carved from your VPC (or a TMM external AZ subnet) for BNK Gateway VIPs (e.g. `192.168.250.0/24`). Empty = skip the BNKGateway CR; required if you want Gateway/HTTPRoute traffic to flow. |
 
 > **`cloud_az_subnet_mappings`, `availability_zone_count`, `worker_node_count`, `vpc_cidr`** are all auto-wired from `eks-cluster-register`. The register module queries the EKS cluster's own VPC + node group config and exposes them so `cneinstall` can compute sensible defaults (the tmm_replicas auto-default uses both AZ and node counts). Users don't see or set these — EKS already knows them.
 
@@ -74,7 +74,7 @@ After apply:
 - F5 Lifecycle Operator is installed with AWS-tuned defaults; BNK CRDs (`F5SPKVlan`, `CNEInstance`, `BNKNetPolicy`, etc.) are registered with the cluster API.
 - CNEInstance CR is applied with AWS production defaults — FLO rolls out CWC, DSSM, OTEL, RabbitMQ, TMM, and the IPAM operator.
 - AWS IRSA is wired for the CNE controller: IAM role with EC2 VIP permissions, SA annotated, controller restarted.
-- (When configured) cloud-network-mapping ConfigMap and F5BnkGateway chassis CR are applied so the CNE controller can compute multi-AZ TMM placement and Gateway/HTTPRoute translation works.
+- (When configured) cloud-network-mapping ConfigMap and BNKGateway CR (`kind: F5BnkGateway`) are applied so the CNE controller can compute multi-AZ TMM placement and Gateway/HTTPRoute translation works.
 
 ## What's still required to deploy BNK end-to-end
 

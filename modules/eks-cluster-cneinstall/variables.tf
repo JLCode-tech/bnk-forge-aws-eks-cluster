@@ -196,37 +196,40 @@ variable "cloud_az_subnet_mappings" {
 }
 
 # =============================================================================
-# F5BnkGateway chassis CR (AWS-specific — without this CR the CNE controller
-# silently ignores all Gateway/HTTPRoute CRs even when CNEInstance is
-# Programmed=True. Documented in bnk-forge-modules PR #58.)
+# BNKGateway CR (kind: F5BnkGateway) — AWS/EKS Gateway-API IPAM CR.
+# Without this CR the CNE controller silently ignores all Gateway/HTTPRoute
+# CRs even when CNEInstance is Programmed=True. Discovery trail in
+# bnk-forge-modules PR #58. (F5 docs call this BNKGateway / F5BnkGateway;
+# the historical "chassis" terminology has been removed from this module.)
 # =============================================================================
 
 variable "vip_cidr" {
   description = <<-EOT
     CIDR block from which BNK Gateway VIPs are allocated. The module computes
-    the F5BnkGateway chassis CR's defaultListenerNetworks entry from this:
+    the BNKGateway CR's defaultListenerNetworks entry from this:
       start_address = cidrhost(vip_cidr, 1)     # first usable
       end_address   = cidrhost(vip_cidr, -2)    # last usable (skip broadcast)
 
-    Empty string = skip the F5BnkGateway chassis CR entirely. Without the
-    chassis CR, the CNE controller silently ignores all Gateway/HTTPRoute CRs
-    on AWS/EKS — set this for any Gateway-API workload.
+    Empty string = skip the BNKGateway CR entirely. Without the BNKGateway
+    CR, the CNE controller silently ignores all Gateway/HTTPRoute CRs on
+    AWS/EKS — set this for any Gateway-API workload.
 
-    Pick a CIDR carved from the cluster's VPC CIDR. For a VPC of 192.168.0.0/16,
-    a common pattern is to reserve 192.168.250.0/24 (or similar) for BNK VIPs.
+    Pick a CIDR carved from the cluster's VPC CIDR (or the TMM external AZ
+    subnet CIDR — clients in that subnet reach VIPs directly without BGP).
+    For a VPC of 192.168.0.0/16, a common pattern is to reserve 192.168.250.0/24.
   EOT
   type        = string
   default     = ""
 }
 
-variable "chassis_name" {
-  description = "Name of the F5BnkGateway chassis CR."
+variable "bnk_gateway_name" {
+  description = "Name of the BNKGateway CR (kind: F5BnkGateway)."
   type        = string
-  default     = "bnk-gateway-chassis"
+  default     = "bnk-gateway"
 }
 
 variable "vip_network_name" {
-  description = "Logical name for the VIP listener network in the F5BnkGateway chassis CR's defaultListenerNetworks entry."
+  description = "Logical name for the VIP listener network in the BNKGateway CR's defaultListenerNetworks entry."
   type        = string
   default     = "default"
 }

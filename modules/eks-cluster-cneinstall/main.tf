@@ -9,7 +9,8 @@
 #   2. Renders + applies the CNEInstance CR. FLO observes the CR and rolls out
 #      CWC, DSSM, Observer, OTEL, RabbitMQ, TMM, the F5 IPAM operator + their
 #      ServiceAccounts.
-#   3. Renders + applies the F5BnkGateway chassis CR — required on AWS/EKS for
+#   3. Renders + applies the BNKGateway CR (kind: F5BnkGateway) — IPAM CR
+#      that defines the VIP allocation pool. Required on AWS/EKS for
 #      Gateway-API translation (without it the CNE controller silently ignores
 #      Gateway+HTTPRoute CRs even when CNEInstance is Programmed=True).
 #   4. Creates the IRSA IAM policy + role for the CNE controller, with an OIDC
@@ -48,11 +49,11 @@ locals {
     : min(var.availability_zone_count, var.worker_node_count)
   )
 
-  # Derive F5BnkGateway chassis listener networks from a single vip_cidr.
-  # Empty vip_cidr → skip the chassis CR entirely (preserved-on-prem default).
-  vip_chassis_enabled = var.vip_cidr != ""
+  # Derive F5BnkGateway listener networks from a single vip_cidr.
+  # Empty vip_cidr → skip the BNKGateway CR entirely (preserved-on-prem default).
+  bnk_gateway_enabled = var.vip_cidr != ""
 
-  chassis_listener_networks = local.vip_chassis_enabled ? [{
+  bnk_gateway_listener_networks = local.bnk_gateway_enabled ? [{
     name          = var.vip_network_name
     start_address = cidrhost(var.vip_cidr, 1)
     end_address   = cidrhost(var.vip_cidr, -2)
@@ -76,10 +77,10 @@ locals {
     az_subnet_mappings = var.cloud_az_subnet_mappings
   })
 
-  f5_bnkgateway_manifest = templatefile("${path.module}/manifests/f5-bnkgateway-chassis.yaml.tftpl", {
+  bnk_gateway_manifest = templatefile("${path.module}/manifests/bnk-gateway.yaml.tftpl", {
     instance_namespace        = var.operator_namespace
-    chassis_name              = var.chassis_name
-    default_listener_networks = local.chassis_listener_networks
+    bnk_gateway_name          = var.bnk_gateway_name
+    default_listener_networks = local.bnk_gateway_listener_networks
   })
 
   oidc_host_path        = replace(var.cluster_oidc_issuer_url, "https://", "")
@@ -159,17 +160,18 @@ MANIFEST
 }
 
 # =============================================================================
-# 3. F5BnkGateway chassis CR (AWS — Gateway-API translation pipeline trigger)
+# 3. BNKGateway CR — kind: F5BnkGateway, the IPAM CR that gates Gateway-API
+#    translation on AWS/EKS
 # =============================================================================
 
-resource "null_resource" "f5_bnkgateway_chassis" {
-  count = local.vip_chassis_enabled ? 1 : 0
+resource "null_resource" "bnk_gateway" {
+  count = local.bnk_gateway_enabled ? 1 : 0
 
   triggers = {
-    manifest_hash   = sha256(local.f5_bnkgateway_manifest)
+    manifest_hash   = sha256(local.bnk_gateway_manifest)
     kubeconfig_file = local_sensitive_file.kubeconfig.filename
     namespace       = var.operator_namespace
-    name            = var.chassis_name
+    name            = var.bnk_gateway_name
   }
 
   depends_on = [
@@ -178,9 +180,9 @@ resource "null_resource" "f5_bnkgateway_chassis" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "=== Applying F5BnkGateway chassis ${var.chassis_name} (VIP CIDR ${var.vip_cidr}) ==="
+      echo "=== Applying BNKGateway ${var.bnk_gateway_name} (VIP CIDR ${var.vip_cidr}) ==="
       cat <<'MANIFEST' | ${local.kubectl} apply -f -
-${local.f5_bnkgateway_manifest}
+${local.bnk_gateway_manifest}
 MANIFEST
     EOT
   }

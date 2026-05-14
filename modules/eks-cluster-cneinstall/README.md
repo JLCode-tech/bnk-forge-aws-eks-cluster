@@ -8,7 +8,7 @@ Apply the CNEInstance CR on AWS EKS, lay down AWS-specific supporting resources,
 |---|---|---|
 | 1 | Render + apply the `cloud-network-mapping` ConfigMap with AWS AZ → subnet mapping. The CNE controller reads it for multi-AZ TMM placement. The AZ/subnet list is **auto-wired** from `eks-cluster-register.cloud_az_subnet_mappings` — discovered from the EKS cluster's own VPC config, so users don't have to re-enter what EKS already knows. | Skipped only if the EKS cluster returns no subnets (shouldn't happen in practice). |
 | 2 | Render + apply the `CNEInstance` CR with AWS-tuned production defaults. FLO observes the CR and rolls out CWC, DSSM, Observer, OTEL, RabbitMQ, TMM, and the IPAM operator. | Always |
-| 3 | Render + apply the `F5BnkGateway` chassis CR (required on AWS/EKS for Gateway-API translation — see [bnk-forge-modules PR #58](https://github.com/JLCode-tech/bnk-forge-modules/pull/58) for the discovery trail). | Skipped if `bnk_gateway_chassis.default_listener_networks` is empty. |
+| 3 | Render + apply the `BNKGateway` CR (`kind: F5BnkGateway`) — IPAM CR that gates Gateway-API translation on AWS/EKS (see [bnk-forge-modules PR #58](https://github.com/JLCode-tech/bnk-forge-modules/pull/58) for the discovery trail). | Skipped if `vip_cidr` is empty. |
 | 4 | Create IAM policy (`<cluster>-allow-ec2-vip`) + IRSA role (`<cluster>-cne-controller-vip`) with OIDC trust scoped to the CNE controller's SA. | Always |
 | 5 | Wait for FLO to create the CNE controller SA (up to `wait_for_sa_timeout_seconds`), annotate it with `eks.amazonaws.com/role-arn`, rollout-restart the deployment. | Always |
 
@@ -45,8 +45,8 @@ Apply the CNEInstance CR on AWS EKS, lay down AWS-specific supporting resources,
 | `watch_namespaces` | `["All"]` | Which namespaces the controller watches. |
 | `network_attachments` | `["ens7-ipvlan-l2"]` | NAD names attached to TMM. Matches the future `network-setup` module's default NAD. |
 | `storage_class_name` | `gp3` | EKS gp3 is the AWS default. |
-| `vip_cidr` | `""` | CIDR for BNK Gateway VIPs. Module computes `start_address = cidrhost(vip_cidr, 1)`, `end_address = cidrhost(vip_cidr, -2)` for the F5BnkGateway chassis CR. Empty = skip chassis CR. |
-| `chassis_name`, `vip_network_name` | `bnk-gateway-chassis`, `default` | F5BnkGateway CR + listener-network names. Rarely changed. |
+| `vip_cidr` | `""` | CIDR for BNK Gateway VIPs. Module computes `start_address = cidrhost(vip_cidr, 1)`, `end_address = cidrhost(vip_cidr, -2)` for the BNKGateway CR. Empty = skip CR. |
+| `bnk_gateway_name`, `vip_network_name` | `bnk-gateway`, `default` | BNKGateway CR + listener-network names. Rarely changed. |
 `cloud_az_subnet_mappings`, `availability_zone_count`, `worker_node_count`, `vpc_cidr` are not user-facing inputs — they're auto-wired from `eks-cluster-register` via `data.aws_eks_cluster` + `data.aws_subnet` + `data.aws_vpc` + `data.aws_eks_node_group`.
 
 ## Cluster admin prerequisite (manual)
@@ -104,7 +104,7 @@ See the table above under "Exposed as blueprint inputs".
 |---|---|
 | `cneinstance_namespace`, `cneinstance_ready` | `eks-cluster-license` (downstream gate) |
 | `cne_controller_role_arn` | (reference / future modules) |
-| `cloud_network_mapping_applied`, `bnk_gateway_chassis_applied` | Diagnostic outputs — confirm conditional resources ran |
+| `cloud_network_mapping_applied`, `bnk_gateway_applied` | Diagnostic outputs — confirm conditional resources ran |
 
 ## Provenance
 
@@ -114,7 +114,7 @@ Three sources merged for this module:
 2. [`JLCode-tech/bnk-forge-modules/infra/aws/cne-irsa`](https://github.com/JLCode-tech/bnk-forge-modules/tree/release/2.2/infra/aws/cne-irsa) — IRSA wiring (IAM policy + role + annotate-and-restart dance).
 3. F5 internal *Multinode BNK Deployment in AWS/EKS (FLO)* install guide — AWS-specific CR values (CLOUD_ENV vars, MTU=9000, PAL_CPU_SET=0,2, cloud-network-mapping ConfigMap shape).
 
-Plus the F5BnkGateway chassis logic from [`bnk-forge-modules` PR #58](https://github.com/JLCode-tech/bnk-forge-modules/pull/58) — note that PR is still open in the legacy repo; we adopt its pattern here.
+Plus the BNKGateway CR pattern adapted from [`bnk-forge-modules` PR #58](https://github.com/JLCode-tech/bnk-forge-modules/pull/58) (closed in favor of this catalog repo). Note: that PR called the CR "F5BnkGateway chassis" — F5 docs don't use the term "chassis", so this module drops it. The CR is `kind: F5BnkGateway` (also referenced as `BNKGateway` in F5 docs).
 
 This module is **not** part of the auto-refresh flow from `bnk-forge-catalog-shared`. Updates require manual diff against the upstream sources for each new BNK release.
 
@@ -141,7 +141,7 @@ Verified 2026-05-14 against [F5 CloudDocs CNEInstance CR parameters (BNK 2.2)](h
 | `tmm.env.PAL_CPU_SET=0,2` | Same | Same |
 | `tmm.env.TMM_MAPRES_ADDL_VETHS_ON_DP=TRUE` | Same | Same |
 | `cloud-network-mapping` ConfigMap (separate resource the controller reads) | Internal install guide only | Required for AWS multi-AZ TMM placement |
-| F5BnkGateway chassis CR (`apiVersion: k8s.f5net.com/v1`) | Not in F5 public docs — discovery trail in [bnk-forge-modules PR #58](https://github.com/JLCode-tech/bnk-forge-modules/pull/58) | Behavior tied to `f5ingress` controller version; required on AWS/EKS as of `v14.19.4-0.1.36` |
+| BNKGateway CR (`apiVersion: k8s.f5net.com/v1`, `kind: F5BnkGateway`) | Schema documented in F5 CloudDocs ([BNKGateway CR](https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/custom-resource-definitions/bnk-bnkgateway.html)) — *but* its role as the trigger that activates Gateway-API translation on AWS/EKS is not in F5 docs; discovery trail in [bnk-forge-modules PR #58](https://github.com/JLCode-tech/bnk-forge-modules/pull/58). Behavior tied to `f5ingress` controller version; required as of `v14.19.4-0.1.36`. |
 
 These settings are **load-bearing for AWS deployments** but customers won't find them in the public CR reference. When BNK ships a new release, re-verify the AWS install guide and the F5BnkGateway controller behavior haven't changed shape.
 

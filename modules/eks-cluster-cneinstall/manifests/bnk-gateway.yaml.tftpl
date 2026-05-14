@@ -1,11 +1,11 @@
 apiVersion: k8s.f5net.com/v1
 kind: F5BnkGateway
 metadata:
-  name: ${chassis_name}
+  name: ${bnk_gateway_name}
   namespace: ${instance_namespace}
   labels:
     app.kubernetes.io/managed-by: bnk-forge
-    app.kubernetes.io/component: chassis-config
+    app.kubernetes.io/component: bnk-gateway-ipam
 spec:
   ingressConfig:
     defaultListenerNetworks:
