@@ -38,6 +38,26 @@ resource "local_sensitive_file" "kubeconfig" {
 locals {
   kubectl = "kubectl --kubeconfig ${local_sensitive_file.kubeconfig.filename}"
 
+  # Smart tmm_replicas default: when caller passes 0 (the sentinel), derive
+  # from cluster topology. The 1-TMM-per-AZ pattern is the F5 install guide's
+  # default; cap at worker_node_count so we never request more TMM pods than
+  # there are nodes to schedule them on.
+  effective_tmm_replicas = (
+    var.tmm_replicas > 0
+    ? var.tmm_replicas
+    : min(var.availability_zone_count, var.worker_node_count)
+  )
+
+  # Derive F5BnkGateway chassis listener networks from a single vip_cidr.
+  # Empty vip_cidr → skip the chassis CR entirely (preserved-on-prem default).
+  vip_chassis_enabled = var.vip_cidr != ""
+
+  chassis_listener_networks = local.vip_chassis_enabled ? [{
+    name          = var.vip_network_name
+    start_address = cidrhost(var.vip_cidr, 1)
+    end_address   = cidrhost(var.vip_cidr, -2)
+  }] : []
+
   cneinstance_manifest = templatefile("${path.module}/manifests/cneinstance.yaml.tftpl", {
     instance_name       = var.instance_name
     instance_namespace  = var.operator_namespace
@@ -48,18 +68,18 @@ locals {
     far_secret_name     = var.far_secret_name
     network_attachments = var.network_attachments
     watch_namespaces    = var.watch_namespaces
-    tmm_replicas        = var.tmm_replicas
+    tmm_replicas        = local.effective_tmm_replicas
   })
 
   cloud_network_mapping_manifest = templatefile("${path.module}/manifests/cloud-network-mapping.yaml.tftpl", {
-    instance_namespace  = var.operator_namespace
-    az_subnet_mappings  = var.cloud_az_subnet_mappings
+    instance_namespace = var.operator_namespace
+    az_subnet_mappings = var.cloud_az_subnet_mappings
   })
 
   f5_bnkgateway_manifest = templatefile("${path.module}/manifests/f5-bnkgateway-chassis.yaml.tftpl", {
     instance_namespace        = var.operator_namespace
-    chassis_name              = var.bnk_gateway_chassis.name
-    default_listener_networks = var.bnk_gateway_chassis.default_listener_networks
+    chassis_name              = var.chassis_name
+    default_listener_networks = local.chassis_listener_networks
   })
 
   oidc_host_path        = replace(var.cluster_oidc_issuer_url, "https://", "")
@@ -143,13 +163,13 @@ MANIFEST
 # =============================================================================
 
 resource "null_resource" "f5_bnkgateway_chassis" {
-  count = length(var.bnk_gateway_chassis.default_listener_networks) > 0 ? 1 : 0
+  count = local.vip_chassis_enabled ? 1 : 0
 
   triggers = {
     manifest_hash   = sha256(local.f5_bnkgateway_manifest)
     kubeconfig_file = local_sensitive_file.kubeconfig.filename
     namespace       = var.operator_namespace
-    name            = var.bnk_gateway_chassis.name
+    name            = var.chassis_name
   }
 
   depends_on = [
@@ -158,7 +178,7 @@ resource "null_resource" "f5_bnkgateway_chassis" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "=== Applying F5BnkGateway chassis ${var.bnk_gateway_chassis.name} ==="
+      echo "=== Applying F5BnkGateway chassis ${var.chassis_name} (VIP CIDR ${var.vip_cidr}) ==="
       cat <<'MANIFEST' | ${local.kubectl} apply -f -
 ${local.f5_bnkgateway_manifest}
 MANIFEST

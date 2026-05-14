@@ -54,6 +54,21 @@ output "vpc_id" {
   value       = data.aws_eks_cluster.existing.vpc_config[0].vpc_id
 }
 
+output "vpc_cidr" {
+  description = "Primary CIDR block of the EKS cluster's VPC. Downstream modules use this to derive sensible defaults for VIP ranges and app subnets without re-asking the user."
+  value       = data.aws_vpc.cluster_vpc.cidr_block
+}
+
+output "worker_node_count" {
+  description = "Total desired worker node count across all node groups in the cluster (sum of scaling_config.desired_size). cneinstall uses this as the upper bound for tmm_replicas — a TMM pod can't schedule without a labeled node available."
+  value       = local.worker_node_count
+}
+
+output "availability_zone_count" {
+  description = "Number of distinct availability zones the cluster spans. cneinstall uses this as the natural default for tmm_replicas (typical 1-TMM-per-AZ pattern)."
+  value       = length(local.subnets_by_az)
+}
+
 output "subnet_ids" {
   description = "All subnet IDs attached to the EKS cluster's VPC config."
   value       = data.aws_eks_cluster.existing.vpc_config[0].subnet_ids
