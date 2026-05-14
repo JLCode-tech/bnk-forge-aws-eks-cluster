@@ -2,13 +2,15 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-existing-cluster-with-hp-nodes",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "name": "AWS EKS Existing Cluster + HP Nodes",
     "description": "Adopt an existing AWS EKS cluster, add a dedicated high-performance node pool with the 3-interface TMM model (CNI + ens7 external + ens8 internal), and lay down the BNK control plane on top. The HP node pool provisions per-AZ TMM-external + TMM-internal subnets and dual secondary ENIs per node; TMM pods land here via app=f5-tmm label. NetworkAttachmentDefinitions (ens7-ipvlan-l2 + ens8-ipvlan-l2) are a manual prerequisite until a dedicated NAD module ships."
   },
   "bnk_version": "2.2",
   "compatibility": {
-    "supported_platform_profiles": ["aws_eks"],
+    "supported_platform_profiles": [
+      "aws_eks"
+    ],
     "required_capabilities": []
   },
   "category": "bnk",
@@ -33,7 +35,21 @@
   "estimated_cost": "AWS usage-based — adds ~3× m5n.large nodes for the HP pool on top of the existing cluster",
   "difficulty": "advanced",
   "maturity": "alpha",
-  "tags": ["aws", "eks", "kubernetes", "cluster", "register", "hp-nodes", "tmm", "sriov", "cert-manager", "bnk-prereqs", "flo", "cneinstance", "irsa"],
+  "tags": [
+    "aws",
+    "eks",
+    "kubernetes",
+    "cluster",
+    "register",
+    "hp-nodes",
+    "tmm",
+    "sriov",
+    "cert-manager",
+    "bnk-prereqs",
+    "flo",
+    "cneinstance",
+    "irsa"
+  ],
   "outcomes": [
     "An existing AWS EKS cluster is referenced by name and adopted into BNK Forge",
     "Per-AZ TMM-external subnets (tagged f5-bnk-role=tmm-external) and TMM-internal subnets (tagged f5-bnk-role=tmm-internal) are created in the cluster VPC",
@@ -191,14 +207,19 @@
         "name": "watch_namespaces",
         "type": "list(string)",
         "description": "Which namespaces the CNE controller watches for Gateway/HTTPRoute CRs. ['All'] watches everything.",
-        "default": ["All"],
+        "default": [
+          "All"
+        ],
         "order": 72
       },
       {
         "name": "network_attachments",
         "type": "list(string)",
         "description": "NetworkAttachmentDefinition names attached to TMM. Default matches the dual-ENI HP node pool: ens7-ipvlan-l2 (external) and ens8-ipvlan-l2 (internal). Both NADs must exist on the cluster — see prerequisites.",
-        "default": ["ens7-ipvlan-l2", "ens8-ipvlan-l2"],
+        "default": [
+          "ens7-ipvlan-l2",
+          "ens8-ipvlan-l2"
+        ],
         "order": 73
       },
       {
@@ -237,7 +258,7 @@
       "name": "EKS Cluster Register",
       "description": "Reference an existing EKS cluster and emit BNK registration outputs.",
       "module": "modules/eks-cluster-register",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "depends_on": [],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
@@ -252,8 +273,10 @@
       "name": "HP TMM Node Pool",
       "description": "Provision dedicated TMM-external + TMM-internal subnets per AZ, an HP EKS managed node group (m5n.large), and dual secondary ENIs (ens7 external + ens8 internal) on each node. cneinstall later rediscovers the tagged subnets to wire the BNKGateway CR's listener networks.",
       "module": "modules/eks-cluster-hp-nodes",
-      "version": "0.2.0-alpha",
-      "depends_on": ["cluster-register"],
+      "version": "0.3.0-alpha",
+      "depends_on": [
+        "cluster-register"
+      ],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
         "aws_secret_access_key": "${aws_secret_access_key}",
@@ -269,8 +292,10 @@
       "name": "Install Multus CNI",
       "description": "Cloud-agnostic Multus CNI install (vendored from bnk-forge-catalog-shared). Applies the upstream multus-daemonset manifest, waits for the NetworkAttachmentDefinition CRD + DaemonSet rollout. Pre-requisite for tmm-nads.",
       "module": "modules/eks-cluster-install-multus",
-      "version": "0.1.0-alpha",
-      "depends_on": ["hp-nodes"],
+      "version": "0.2.0-alpha",
+      "depends_on": [
+        "hp-nodes"
+      ],
       "inputs": {}
     },
     {
@@ -279,7 +304,10 @@
       "description": "Create the ens7-ipvlan-l2 + ens8-ipvlan-l2 NetworkAttachmentDefinitions TMM needs for its dual data-plane interfaces. Each NAD's static-address placeholder is derived from the matching f5-bnk-role-tagged subnet via apply-time discovery — no hardcoded 10.10.1.1/24.",
       "module": "modules/eks-cluster-install-tmm-nads",
       "version": "0.3.0-alpha",
-      "depends_on": ["hp-nodes", "install-multus"],
+      "depends_on": [
+        "hp-nodes",
+        "install-multus"
+      ],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
         "aws_secret_access_key": "${aws_secret_access_key}",
@@ -293,7 +321,12 @@
       "description": "Create BNK namespaces, FAR image pull secrets, and download the BNK manifest.",
       "module": "modules/eks-cluster-install-bnk-prereqs",
       "version": "1.0.0",
-      "depends_on": ["cluster-register", "hp-nodes", "install-multus", "tmm-nads"],
+      "depends_on": [
+        "cluster-register",
+        "hp-nodes",
+        "install-multus",
+        "tmm-nads"
+      ],
       "inputs": {
         "cne_pull_secret": "${cne_pull_secret}",
         "operator_namespace": "${operator_namespace}",
@@ -309,7 +342,9 @@
       "description": "Install Jetstack cert-manager with BNK-compatible defaults.",
       "module": "modules/eks-cluster-install-cert-manager",
       "version": "3.1.0",
-      "depends_on": ["bnk-prereqs"],
+      "depends_on": [
+        "bnk-prereqs"
+      ],
       "inputs": {
         "cluster_name": "${eks_cluster_name}",
         "bnk_namespace": "${operator_namespace}"
@@ -321,7 +356,9 @@
       "description": "Create the BNK-managed self-signed CA and ClusterIssuer used by FLO + OTEL certs.",
       "module": "modules/eks-cluster-install-cert-issuer",
       "version": "1.0.0",
-      "depends_on": ["cert-manager"],
+      "depends_on": [
+        "cert-manager"
+      ],
       "inputs": {
         "instance_namespace": "${operator_namespace}"
       }
@@ -332,7 +369,9 @@
       "description": "Install FLO via Helm with AWS-tuned defaults (containerPlatform=AWS, fluentbit sidecar disabled, IPAM operator in default ns). Registers BNK CRDs.",
       "module": "modules/eks-cluster-install-flo",
       "version": "2.0.0",
-      "depends_on": ["cert-issuer"],
+      "depends_on": [
+        "cert-issuer"
+      ],
       "inputs": {
         "flo_namespace": "${operator_namespace}",
         "cluster_name": "${eks_cluster_name}",
@@ -346,8 +385,11 @@
       "name": "CNEInstance + IRSA",
       "description": "Apply the CNEInstance CR with AWS production defaults, the cloud-network-mapping ConfigMap, the BNKGateway CR (kind: F5BnkGateway) for VIP IPAM (when vip_cidr is set), and wire AWS IRSA for the CNE controller (IAM role + SA annotation + rollout-restart).",
       "module": "modules/eks-cluster-cneinstall",
-      "version": "1.0.0",
-      "depends_on": ["flo", "tmm-nads"],
+      "version": "1.1.0",
+      "depends_on": [
+        "flo",
+        "tmm-nads"
+      ],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
         "aws_secret_access_key": "${aws_secret_access_key}",
