@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "aws_eks_cluster_create",
+    "path": "modules/eks-cluster-create",
+    "version": "0.1.0-beta",
+    "category": "infra",
+    "description": "Provision a new AWS EKS cluster (VPC, subnets across 3 AZs, NAT, managed node group, IRSA OIDC) ready for BNK. Uses the upstream terraform-aws-modules/vpc/aws and terraform-aws-modules/eks/aws so production hardening (IMDSv2, EBS encryption, OIDC, control-plane logging) comes from a widely-audited baseline. Outputs match aws_eks_cluster_register_existing's shape so the downstream BNK install chain is identical regardless of provisioning path.",
+    "provider": "aws",
+    "supported_platforms": ["aws_eks"],
+    "tags": ["aws", "eks", "kubernetes", "cluster", "provision", "vpc", "infrastructure"],
+    "maturity": "beta"
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "dependencies": {
+    "required": [],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "string",
+        "description": "AWS access key ID. Resolved by Forge's credential template at deploy time — populated for all three auth methods (access_keys, profile, sso) via boto3 normalization.",
+        "source": "user",
+        "sensitive": true
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "string",
+        "description": "AWS secret access key. Resolved by Forge's credential template at deploy time. Populated regardless of auth method.",
+        "source": "user",
+        "sensitive": true
+      },
+      {
+        "name": "aws_region",
+        "type": "string",
+        "description": "AWS region to provision the new EKS cluster in.",
+        "source": "user"
+      },
+      {
+        "name": "eks_cluster_name",
+        "type": "string",
+        "description": "Name for the new EKS cluster. Also used as a prefix for VPC, subnet, IAM role names.",
+        "source": "user"
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "string",
+        "description": "AWS session token. Populated for STS-assumed-role, AWS SSO, and any profile that derives temporary credentials. Empty for long-lived IAM user keys.",
+        "source": "user",
+        "sensitive": true,
+        "default": ""
+      },
+      {
+        "name": "eks_cluster_version",
+        "type": "string",
+        "description": "EKS Kubernetes minor version (e.g. '1.30'). Empty = community module picks the latest stable.",
+        "source": "user",
+        "default": ""
+      },
+      {
+        "name": "vpc_cidr",
+        "type": "string",
+        "description": "CIDR block for the new VPC. Default leaves room for /24 subnets per AZ.",
+        "source": "user",
+        "default": "10.0.0.0/16"
+      },
+      {
+        "name": "worker_instance_type",
+        "type": "string",
+        "description": "EC2 instance type for the EKS managed node group.",
+        "source": "user",
+        "default": "m5.large"
+      },
+      {
+        "name": "worker_count_per_az",
+        "type": "number",
+        "description": "Desired worker nodes per AZ. Total nodes = this × availability_zone_count.",
+        "source": "user",
+        "default": 1
+      },
+      {
+        "name": "worker_disk_size_gb",
+        "type": "number",
+        "description": "Worker node root volume size.",
+        "source": "user",
+        "default": 50
+      },
+      {
+        "name": "tag_private_subnets_for_tmm",
+        "type": "boolean",
+        "description": "When true, tag private subnets with 'f5-bnk-role=tmm-external' so the cluster-create outputs (and downstream cneinstall) can auto-discover them for the BNKGateway CR's defaultListenerNetworks.",
+        "source": "user",
+        "default": true
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "cluster_id",
+        "type": "string",
+        "description": "EKS cluster ARN — used by BNK Forge for cluster registration."
+      },
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "EKS cluster name."
+      },
+      {
+        "name": "cluster_endpoint",
+        "type": "string",
+        "description": "EKS cluster API endpoint."
+      },
+      {
+        "name": "eks_cluster_arn",
+        "type": "string",
+        "description": "EKS cluster ARN (explicit name)."
+      },
+      {
+        "name": "eks_cluster_version",
+        "type": "string",
+        "description": "EKS Kubernetes minor version."
+      },
+      {
+        "name": "cluster_certificate_authority_data",
+        "type": "string",
+        "description": "Base64-encoded cluster CA certificate."
+      },
+      {
+        "name": "cluster_oidc_issuer_url",
+        "type": "string",
+        "description": "OIDC issuer URL — used downstream for IRSA configuration."
+      },
+      {
+        "name": "region",
+        "type": "string",
+        "description": "AWS region for the cluster."
+      },
+      {
+        "name": "kubeconfig",
+        "type": "string",
+        "description": "Base64-encoded kubeconfig with a short-lived STS token. BNK Forge ingests this on first scan."
+      },
+      {
+        "name": "vpc_id",
+        "type": "string",
+        "description": "VPC ID the new EKS cluster lives in."
+      },
+      {
+        "name": "vpc_cidr",
+        "type": "string",
+        "description": "Primary CIDR block of the VPC."
+      },
+      {
+        "name": "subnet_ids",
+        "type": "list(string)",
+        "description": "All subnet IDs (private + public) attached to the EKS cluster."
+      },
+      {
+        "name": "cloud_az_subnet_mappings",
+        "type": "list(object({name=string,subnets=list(object({cidr=string,subnet_id=string}))}))",
+        "description": "AZ → subnets list (private subnets). Consumed by cneinstall for the cloud-network-mapping ConfigMap."
+      },
+      {
+        "name": "tmm_external_subnets_by_az",
+        "type": "list(object({name=string,subnets=list(object({cidr=string,subnet_id=string}))}))",
+        "description": "AZ → TMM external subnets list (private subnets tagged f5-bnk-role=tmm-external). Empty when tag_private_subnets_for_tmm = false. cneinstall consumes this to auto-build the BNKGateway CR's defaultListenerNetworks."
+      },
+      {
+        "name": "worker_node_count",
+        "type": "number",
+        "description": "Total worker node count: worker_count_per_az × az_count."
+      },
+      {
+        "name": "availability_zone_count",
+        "type": "number",
+        "description": "Number of distinct AZs the cluster spans."
+      },
+      {
+        "name": "oidc_provider_arn",
+        "type": "string",
+        "description": "ARN of the IAM OIDC provider created by the EKS community module for IRSA. cneinstall derives this independently; this output is for any downstream module that wants the ARN directly."
+      }
+    ]
+  },
+  "credentials": {
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "cloud",
+        "description": "AWS credential template (any auth method — access_keys, profile, or sso). Forge resolves it to access_key_id at deploy time."
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "cloud",
+        "description": "AWS credential template (any auth method). Forge resolves to secret_access_key at deploy time."
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "cloud",
+        "description": "AWS credential template (any auth method). Forge populates this for STS / SSO / profiles that derive temporary credentials; empty for static long-lived keys."
+      }
+    ]
+  }
+}
