@@ -2,13 +2,15 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-cluster-create",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "name": "AWS EKS Cluster Create",
     "description": "Provision a new AWS EKS cluster end-to-end (VPC, 3 AZs, NAT, managed node group, IRSA OIDC) and lay down the BNK control plane on top: namespaces + FAR pull secrets + manifest, cert-manager, BNK cert issuer, F5 Lifecycle Operator (FLO), and the CNEInstance (AWS IRSA, cloud-network-mapping ConfigMap, optional BNKGateway CR for VIP IPAM). The cluster module uses terraform-aws-modules/vpc/aws and terraform-aws-modules/eks/aws so production hardening (IMDSv2, EBS encryption, OIDC, control-plane logging) comes from a widely-audited community baseline."
   },
   "bnk_version": "2.2",
   "compatibility": {
-    "supported_platform_profiles": ["aws_eks"],
+    "supported_platform_profiles": [
+      "aws_eks"
+    ],
     "required_capabilities": []
   },
   "category": "bnk",
@@ -33,7 +35,19 @@
   "estimated_cost": "AWS usage-based (EKS control plane + node group + NAT gateway)",
   "difficulty": "intermediate",
   "maturity": "beta",
-  "tags": ["aws", "eks", "kubernetes", "cluster", "create", "vpc", "cert-manager", "bnk-prereqs", "flo", "cneinstance", "irsa"],
+  "tags": [
+    "aws",
+    "eks",
+    "kubernetes",
+    "cluster",
+    "create",
+    "vpc",
+    "cert-manager",
+    "bnk-prereqs",
+    "flo",
+    "cneinstance",
+    "irsa"
+  ],
   "outcomes": [
     "A new AWS VPC (3 AZs, NAT, public + private subnets) is provisioned",
     "Private subnets are tagged with f5-bnk-role=tmm-external so cneinstall auto-builds the BNKGateway CR",
@@ -235,14 +249,18 @@
         "name": "watch_namespaces",
         "type": "list(string)",
         "description": "Which namespaces the CNE controller watches for Gateway/HTTPRoute CRs. ['All'] watches everything.",
-        "default": ["All"],
+        "default": [
+          "All"
+        ],
         "order": 72
       },
       {
         "name": "network_attachments",
         "type": "list(string)",
         "description": "NetworkAttachmentDefinition names attached to TMM. Default ['ens7-ipvlan-l2'] ASSUMES you've manually attached a secondary ENI on a TMM-external subnet to each worker node and applied the matching NAD per the F5 install guide. For a turn-key dedicated HP node pool with the full 3-interface TMM model (ens7 external + ens8 internal), use the aws-eks-cluster-create-with-hp-nodes blueprint instead.",
-        "default": ["ens7-ipvlan-l2"],
+        "default": [
+          "ens7-ipvlan-l2"
+        ],
         "order": 73
       },
       {
@@ -282,7 +300,9 @@
       "description": "Create BNK namespaces, FAR image pull secrets, and download the BNK manifest.",
       "module": "modules/eks-cluster-install-bnk-prereqs",
       "version": "1.0.0",
-      "depends_on": ["cluster-create"],
+      "depends_on": [
+        "cluster-create"
+      ],
       "inputs": {
         "cne_pull_secret": "${cne_pull_secret}",
         "operator_namespace": "${operator_namespace}",
@@ -298,7 +318,9 @@
       "description": "Install Jetstack cert-manager with BNK-compatible defaults.",
       "module": "modules/eks-cluster-install-cert-manager",
       "version": "3.1.0",
-      "depends_on": ["bnk-prereqs"],
+      "depends_on": [
+        "bnk-prereqs"
+      ],
       "inputs": {
         "cluster_name": "${eks_cluster_name}",
         "bnk_namespace": "${operator_namespace}"
@@ -310,7 +332,9 @@
       "description": "Create the BNK-managed self-signed CA and ClusterIssuer used by FLO + OTEL certs.",
       "module": "modules/eks-cluster-install-cert-issuer",
       "version": "1.0.0",
-      "depends_on": ["cert-manager"],
+      "depends_on": [
+        "cert-manager"
+      ],
       "inputs": {
         "instance_namespace": "${operator_namespace}"
       }
@@ -321,7 +345,9 @@
       "description": "Install FLO via Helm with AWS-tuned defaults (containerPlatform=AWS, fluentbit sidecar disabled, IPAM operator in default ns). Registers BNK CRDs.",
       "module": "modules/eks-cluster-install-flo",
       "version": "2.0.0",
-      "depends_on": ["cert-issuer"],
+      "depends_on": [
+        "cert-issuer"
+      ],
       "inputs": {
         "flo_namespace": "${operator_namespace}",
         "cluster_name": "${eks_cluster_name}",
@@ -335,8 +361,10 @@
       "name": "CNEInstance + IRSA",
       "description": "Apply the CNEInstance CR with AWS production defaults, the cloud-network-mapping ConfigMap (auto-built from cluster-create outputs), the BNKGateway CR (kind: F5BnkGateway) for VIP IPAM (when vip_cidr is set), and wire AWS IRSA for the CNE controller (IAM role + SA annotation + rollout-restart).",
       "module": "modules/eks-cluster-cneinstall",
-      "version": "1.0.0",
-      "depends_on": ["flo"],
+      "version": "1.1.0",
+      "depends_on": [
+        "flo"
+      ],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
         "aws_secret_access_key": "${aws_secret_access_key}",

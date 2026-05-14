@@ -2,7 +2,7 @@
   "module": {
     "name": "EKS Cluster CNEInstall",
     "path": "modules/eks-cluster-cneinstall",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "layer": "application",
     "category": "bnk",
     "description": "Apply the CNEInstance CR on AWS EKS plus the AWS-specific cloud-network-mapping ConfigMap and (optional) BNKGateway CR (kind: F5BnkGateway, IPAM), and wire AWS IRSA for the CNE controller (IAM role + OIDC trust + SA annotation + rollout-restart).",

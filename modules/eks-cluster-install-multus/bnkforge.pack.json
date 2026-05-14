@@ -3,7 +3,7 @@
   "module": {
     "name": "Install Multus CNI",
     "path": "modules/eks-cluster-install-multus",
-    "version": "0.1.0-alpha",
+    "version": "0.2.0-alpha",
     "category": "k8s",
     "description": "Cloud-agnostic primitive: install Multus CNI on a Kubernetes cluster. Multus is a meta-CNI that lets pods attach to multiple networks via NetworkAttachmentDefinition CRs — required for BNK TMM's data-plane interfaces. Pure k8s logic; no cloud bits. Per-cloud catalogs vendor this and chain a cloud-specific NAD-creation module after it."
   },

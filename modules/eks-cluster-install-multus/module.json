@@ -2,7 +2,7 @@
   "module": {
     "name": "Install Multus CNI",
     "path": "modules/eks-cluster-install-multus",
-    "version": "0.1.0-alpha",
+    "version": "0.2.0-alpha",
     "layer": "kubernetes",
     "category": "k8s",
     "description": "Cloud-agnostic primitive: install Multus CNI on a Kubernetes cluster. Required for BNK TMM's data-plane network attachments. Per-cloud catalogs vendor this and chain a cloud-specific NAD-creation module after it.",
