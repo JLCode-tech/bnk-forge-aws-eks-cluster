@@ -98,10 +98,10 @@
       {
         "name": "node_subnet_ids",
         "type": "list(string)",
-        "description": "Cluster subnet IDs where the HP managed node group places its PRIMARY ENI. Both secondary ENIs land in dedicated TMM subnets via user-data.",
+        "description": "Private subnet IDs where the HP managed node group places its PRIMARY ENI. cluster-register and cluster-create both expose private_subnet_ids: register aliases it to the full subnet list (brownfield can't safely distinguish), create returns only the truly private subnets it provisioned. Either way HP nodes stay off public subnets. Both secondary ENIs land in dedicated TMM subnets via user-data.",
         "source": "module",
         "from_module": "modules/eks-cluster-register",
-        "from_output": "subnet_ids"
+        "from_output": "private_subnet_ids"
       }
     ],
     "optional": [
