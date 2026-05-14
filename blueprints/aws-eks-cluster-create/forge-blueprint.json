@@ -2,87 +2,39 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-cluster-create",
-    "version": "0.2.0",
-    "name": "AWS EKS Cluster Create",
-    "description": "Provision a new AWS EKS cluster end-to-end (VPC, 3 AZs, NAT, managed node group, IRSA OIDC) and lay down the BNK control plane on top: namespaces + FAR pull secrets + manifest, cert-manager, BNK cert issuer, F5 Lifecycle Operator (FLO), and the CNEInstance (AWS IRSA, cloud-network-mapping ConfigMap, optional BNKGateway CR for VIP IPAM). The cluster module uses terraform-aws-modules/vpc/aws and terraform-aws-modules/eks/aws so production hardening (IMDSv2, EBS encryption, OIDC, control-plane logging) comes from a widely-audited community baseline."
+    "version": "0.3.0",
+    "name": "AWS EKS Cluster Create + BNK 2.2",
+    "description": "Provision a new AWS EKS cluster (VPC + 3 AZs + managed node group) and install the BNK 2.2 platform on it."
   },
   "bnk_version": "2.2",
-  "compatibility": {
-    "supported_platform_profiles": [
-      "aws_eks"
-    ],
-    "required_capabilities": []
-  },
-  "category": "bnk",
+  "category": "infra",
   "cloud_provider": "aws",
-  "platform_defaults": {
-    "eks": {
-      "container_platform": "Generic",
-      "storage_class_name": "gp3",
-      "cloud_provider": "aws",
-      "cni_type": "ipvlan",
-      "nad_cni_type": "ipvlan",
-      "nad_interface_name": "eth0",
-      "nad_ipvlan_mode": "l2",
-      "cert_manager_namespace": "cert-manager",
-      "flo_namespace": "f5-operator",
-      "flo_utils_namespace": "f5-utils"
-    }
+  "compatibility": {
+    "supported_platform_profiles": ["aws_eks"],
+    "required_capabilities": []
   },
   "icon": "Cloud",
   "color": "orange",
-  "estimated_time": "25-40 minutes (greenfield cluster + full BNK install)",
-  "estimated_cost": "AWS usage-based (EKS control plane + node group + NAT gateway)",
+  "estimated_time": "25-40 minutes",
+  "estimated_cost": "AWS usage-based (EKS + nodes + NAT)",
   "difficulty": "intermediate",
   "maturity": "beta",
-  "tags": [
-    "aws",
-    "eks",
-    "kubernetes",
-    "cluster",
-    "create",
-    "vpc",
-    "cert-manager",
-    "bnk-prereqs",
-    "flo",
-    "cneinstance",
-    "irsa"
-  ],
-  "outcomes": [
-    "A new AWS VPC (3 AZs, NAT, public + private subnets) is provisioned",
-    "Private subnets are tagged with f5-bnk-role=tmm-external so cneinstall auto-builds the BNKGateway CR",
-    "A new EKS cluster + managed node group is provisioned via terraform-aws-modules/eks/aws ~> 21.0",
-    "An IRSA OIDC provider is wired automatically by the EKS module",
-    "BNK namespaces, FAR pull secrets, and component manifest are deployed",
-    "Jetstack cert-manager is installed with BNK-compatible defaults",
-    "The BNK CA-backed ClusterIssuer is created and ready for FLO + OTEL certs",
-    "F5 Lifecycle Operator (FLO) is installed with AWS-tuned defaults; BNK CRDs are registered",
-    "CNEInstance is applied with AWS-specific cneController env vars; FLO rolls out CWC, DSSM, OTEL, RabbitMQ, TMM, IPAM operator",
-    "AWS IRSA is wired for the CNE controller — IAM role + OIDC trust + SA annotation + rollout-restart",
-    "cloud-network-mapping ConfigMap is auto-populated from the new VPC's private subnets",
-    "BNKGateway CR (kind: F5BnkGateway) is applied when vip_cidr is set"
-  ],
+  "tags": ["aws", "eks", "kubernetes", "bnk", "cluster-create"],
   "prerequisites": [
     {
       "type": "credential_template",
       "name": "aws_credentials",
-      "description": "AWS credential template using any of Forge's three auth methods: access_keys (static IAM keys), profile (named AWS profile on the Forge runner), or sso (AWS SSO / Identity Center). Principal needs VPC + EKS + IAM create privileges; Administrator-equivalent is easiest for the initial validation."
+      "description": "AWS credential template (any of Forge's three auth methods). Principal needs VPC + EKS + IAM create privileges."
     },
     {
       "type": "project_secret",
       "name": "cne_pull_secret",
-      "description": "Base64-encoded F5 FAR registry credentials (bare service-account JSON key OR dockerconfigjson). Bound from a stored project secret in the deploy form."
+      "description": "F5 FAR registry credentials."
     },
     {
       "type": "project_secret",
       "name": "jwt_token",
-      "description": "F5 BNK License JWT. Bound from a stored project secret in the deploy form."
-    }
-  ],
-  "input_summary": [
-    {
-      "label": "Input guidance",
-      "value": "Provide AWS credentials, region, and a name for the new EKS cluster. Optional cluster-shape knobs (Kubernetes version, VPC CIDR, node instance type/count) have sensible defaults — override only if your account standards require it. License JWT and FAR pull secret are required project secrets."
+      "description": "F5 BNK License JWT."
     }
   ],
   "inputs": {
@@ -90,7 +42,7 @@
       {
         "name": "aws_access_key_id",
         "type": "string",
-        "description": "AWS access key ID. Auto-resolved from the AWS credential template regardless of auth method (access_keys / profile / sso).",
+        "description": "Auto-filled from the AWS credential template.",
         "sensitive": true,
         "source": "credential_template",
         "source_field": "aws_access_key_id",
@@ -99,7 +51,7 @@
       {
         "name": "aws_secret_access_key",
         "type": "string",
-        "description": "AWS secret access key. Auto-resolved from the AWS credential template regardless of auth method.",
+        "description": "Auto-filled from the AWS credential template.",
         "sensitive": true,
         "source": "credential_template",
         "source_field": "aws_secret_access_key",
@@ -108,7 +60,7 @@
       {
         "name": "aws_region",
         "type": "string",
-        "description": "AWS region to provision the new EKS cluster in.",
+        "description": "AWS region to deploy into.",
         "source": "project",
         "source_field": "region",
         "order": 12
@@ -116,31 +68,15 @@
       {
         "name": "eks_cluster_name",
         "type": "string",
-        "description": "Name for the new EKS cluster. Also used as a prefix for VPC, subnet, IAM role names.",
+        "description": "Name for the new EKS cluster.",
         "order": 20
-      },
-      {
-        "name": "cne_pull_secret",
-        "type": "string",
-        "description": "F5 FAR registry credentials. Bind to a stored project secret in the deploy form.",
-        "sensitive": true,
-        "source": "user",
-        "order": 30
-      },
-      {
-        "name": "jwt_token",
-        "type": "string",
-        "description": "F5 BNK License JWT. Bind to a stored project secret in the deploy form.",
-        "sensitive": true,
-        "source": "user",
-        "order": 31
       }
     ],
     "optional": [
       {
         "name": "aws_session_token",
         "type": "string",
-        "description": "AWS session token. Populated for STS, SSO, and assumed-role-derived profiles; empty for long-lived IAM user keys.",
+        "description": "Auto-filled from the AWS credential template (STS/SSO only).",
         "default": "",
         "sensitive": true,
         "source": "credential_template",
@@ -148,127 +84,39 @@
         "order": 13
       },
       {
-        "name": "eks_cluster_version",
-        "type": "string",
-        "description": "EKS Kubernetes minor version (e.g. '1.30'). Empty = community module picks the latest stable.",
-        "default": "",
-        "order": 21
-      },
-      {
-        "name": "vpc_cidr",
-        "type": "string",
-        "description": "CIDR block for the new VPC. Default carves /24 private + /24 public subnets across 3 AZs.",
-        "default": "10.0.0.0/16",
-        "order": 22
-      },
-      {
         "name": "worker_instance_type",
         "type": "string",
-        "description": "EC2 instance type for the EKS managed node group.",
+        "description": "EC2 instance type for the default node group.",
         "default": "m5.large",
-        "order": 23
+        "order": 30
       },
       {
         "name": "worker_count_per_az",
         "type": "number",
-        "description": "Desired worker nodes per AZ. Total nodes = this × availability_zone_count.",
+        "description": "Worker nodes per AZ.",
         "default": 1,
-        "order": 24
-      },
-      {
-        "name": "worker_disk_size_gb",
-        "type": "number",
-        "description": "Worker node root volume size.",
-        "default": 50,
-        "order": 25
-      },
-      {
-        "name": "tag_private_subnets_for_tmm",
-        "type": "boolean",
-        "description": "Tag private subnets with 'f5-bnk-role=tmm-external' so cneinstall can auto-discover them for the BNKGateway CR's defaultListenerNetworks. Leave true unless you want to skip Gateway-API translation entirely.",
-        "default": true,
-        "order": 26
-      },
-      {
-        "name": "operator_namespace",
-        "type": "string",
-        "description": "Namespace for FLO and all BNK components.",
-        "default": "f5-operator",
-        "order": 40
-      },
-      {
-        "name": "utils_namespace",
-        "type": "string",
-        "description": "Namespace for utility components.",
-        "default": "f5-utils",
-        "order": 41
-      },
-      {
-        "name": "gateway_namespace",
-        "type": "string",
-        "description": "Namespace for Gateway API resources.",
-        "default": "bnk-gw",
-        "order": 42
-      },
-      {
-        "name": "bnk_manifest_version",
-        "type": "string",
-        "description": "BNK manifest version to download from FAR.",
-        "default": "2.2.1-3.2226.0-0.0.511",
-        "order": 50
-      },
-      {
-        "name": "license_mode",
-        "type": "string",
-        "description": "FLO license mode: 'connected' (talks to F5 license server) or 'f5licenseproxy' (talks to a local F5 License Proxy).",
-        "default": "connected",
-        "order": 60
-      },
-      {
-        "name": "container_platform",
-        "type": "string",
-        "description": "FLO containerPlatform value. AWS-tuned default; override only if you need to test against a different platform path in the FLO chart.",
-        "default": "AWS",
-        "order": 61
-      },
-      {
-        "name": "deployment_size",
-        "type": "string",
-        "description": "CNEInstance deploymentSize per F5 docs: Small / Medium / Large / Max (2/4/8/16 CPU, 4/8/16/25 GiB hugepages-2Mi).",
-        "default": "Small",
-        "order": 70
-      },
-      {
-        "name": "tmm_replicas",
-        "type": "number",
-        "description": "Number of TMM replicas. 0 = auto-derive from cluster topology: min(AZ count, worker node count). Set a positive number to override. Cluster admin still has to label nodes with app=f5-tmm for FLO to schedule TMM pods.",
-        "default": 0,
-        "order": 71
-      },
-      {
-        "name": "watch_namespaces",
-        "type": "list(string)",
-        "description": "Which namespaces the CNE controller watches for Gateway/HTTPRoute CRs. ['All'] watches everything.",
-        "default": [
-          "All"
-        ],
-        "order": 72
-      },
-      {
-        "name": "network_attachments",
-        "type": "list(string)",
-        "description": "NetworkAttachmentDefinition names attached to TMM. Default ['ens7-ipvlan-l2'] ASSUMES you've manually attached a secondary ENI on a TMM-external subnet to each worker node and applied the matching NAD per the F5 install guide. For a turn-key dedicated HP node pool with the full 3-interface TMM model (ens7 external + ens8 internal), use the aws-eks-cluster-create-with-hp-nodes blueprint instead.",
-        "default": [
-          "ens7-ipvlan-l2"
-        ],
-        "order": 73
+        "order": 31
       },
       {
         "name": "vip_cidr",
         "type": "string",
-        "description": "CIDR for BNK Gateway VIP allocation. Module derives the BNKGateway CR (kind: F5BnkGateway) start/end addresses from this. Empty = skip the CR (controller will then ignore Gateway/HTTPRoute CRs). Pick a CIDR carved from your cluster VPC or from a TMM external AZ subnet; e.g. for the default 10.0.0.0/16 VPC, '10.0.250.0/24' is typical.",
+        "description": "CIDR for BNK Gateway VIP allocation. Empty = auto-discover from tmm-external-tagged subnets.",
         "default": "",
-        "order": 81
+        "order": 40
+      },
+      {
+        "name": "tmm_replicas",
+        "type": "number",
+        "description": "TMM replicas. 0 = auto-derive from AZ × node count.",
+        "default": 0,
+        "order": 41
+      },
+      {
+        "name": "deployment_size",
+        "type": "string",
+        "description": "CNEInstance size: Small / Medium / Large / Max.",
+        "default": "Small",
+        "order": 42
       }
     ]
   },
@@ -276,7 +124,6 @@
     {
       "id": "cluster-create",
       "name": "EKS Cluster Create",
-      "description": "Provision a new VPC + EKS cluster + node group via terraform-aws-modules.",
       "module": "modules/eks-cluster-create",
       "version": "0.1.0-beta",
       "depends_on": [],
@@ -286,85 +133,54 @@
         "aws_session_token": "${aws_session_token}",
         "aws_region": "${aws_region}",
         "eks_cluster_name": "${eks_cluster_name}",
-        "eks_cluster_version": "${eks_cluster_version}",
-        "vpc_cidr": "${vpc_cidr}",
         "worker_instance_type": "${worker_instance_type}",
-        "worker_count_per_az": "${worker_count_per_az}",
-        "worker_disk_size_gb": "${worker_disk_size_gb}",
-        "tag_private_subnets_for_tmm": "${tag_private_subnets_for_tmm}"
+        "worker_count_per_az": "${worker_count_per_az}"
       }
     },
     {
       "id": "bnk-prereqs",
       "name": "BNK Prerequisites",
-      "description": "Create BNK namespaces, FAR image pull secrets, and download the BNK manifest.",
       "module": "modules/eks-cluster-install-bnk-prereqs",
       "version": "1.0.0",
-      "depends_on": [
-        "cluster-create"
-      ],
+      "depends_on": ["cluster-create"],
       "inputs": {
-        "cne_pull_secret": "${cne_pull_secret}",
-        "operator_namespace": "${operator_namespace}",
-        "utils_namespace": "${utils_namespace}",
-        "gateway_namespace": "${gateway_namespace}",
-        "bnk_manifest_version": "${bnk_manifest_version}",
         "cluster_name": "${eks_cluster_name}"
       }
     },
     {
       "id": "cert-manager",
       "name": "Cert-Manager",
-      "description": "Install Jetstack cert-manager with BNK-compatible defaults.",
       "module": "modules/eks-cluster-install-cert-manager",
       "version": "3.1.0",
-      "depends_on": [
-        "bnk-prereqs"
-      ],
+      "depends_on": ["bnk-prereqs"],
       "inputs": {
-        "cluster_name": "${eks_cluster_name}",
-        "bnk_namespace": "${operator_namespace}"
+        "cluster_name": "${eks_cluster_name}"
       }
     },
     {
       "id": "cert-issuer",
       "name": "BNK Cert Issuer",
-      "description": "Create the BNK-managed self-signed CA and ClusterIssuer used by FLO + OTEL certs.",
       "module": "modules/eks-cluster-install-cert-issuer",
       "version": "1.0.0",
-      "depends_on": [
-        "cert-manager"
-      ],
-      "inputs": {
-        "instance_namespace": "${operator_namespace}"
-      }
+      "depends_on": ["cert-manager"],
+      "inputs": {}
     },
     {
       "id": "flo",
       "name": "F5 Lifecycle Operator",
-      "description": "Install FLO via Helm with AWS-tuned defaults (containerPlatform=AWS, fluentbit sidecar disabled, IPAM operator in default ns). Registers BNK CRDs.",
       "module": "modules/eks-cluster-install-flo",
       "version": "2.0.0",
-      "depends_on": [
-        "cert-issuer"
-      ],
+      "depends_on": ["cert-issuer"],
       "inputs": {
-        "flo_namespace": "${operator_namespace}",
-        "cluster_name": "${eks_cluster_name}",
-        "jwt_token": "${jwt_token}",
-        "license_mode": "${license_mode}",
-        "container_platform": "${container_platform}"
+        "cluster_name": "${eks_cluster_name}"
       }
     },
     {
       "id": "cneinstall",
       "name": "CNEInstance + IRSA",
-      "description": "Apply the CNEInstance CR with AWS production defaults, the cloud-network-mapping ConfigMap (auto-built from cluster-create outputs), the BNKGateway CR (kind: F5BnkGateway) for VIP IPAM (when vip_cidr is set), and wire AWS IRSA for the CNE controller (IAM role + SA annotation + rollout-restart).",
       "module": "modules/eks-cluster-cneinstall",
       "version": "1.1.0",
-      "depends_on": [
-        "flo"
-      ],
+      "depends_on": ["flo"],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
         "aws_secret_access_key": "${aws_secret_access_key}",
@@ -373,8 +189,6 @@
         "eks_cluster_name": "${eks_cluster_name}",
         "deployment_size": "${deployment_size}",
         "tmm_replicas": "${tmm_replicas}",
-        "watch_namespaces": "${watch_namespaces}",
-        "network_attachments": "${network_attachments}",
         "vip_cidr": "${vip_cidr}"
       }
     }

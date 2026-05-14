@@ -2,87 +2,43 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-existing-cluster-with-hp-nodes",
-    "version": "0.2.0",
-    "name": "AWS EKS Existing Cluster + HP Nodes",
-    "description": "Adopt an existing AWS EKS cluster, add a dedicated high-performance node pool with the 3-interface TMM model (CNI + ens7 external + ens8 internal), and lay down the BNK control plane on top. The HP node pool provisions per-AZ TMM-external + TMM-internal subnets and dual secondary ENIs per node; TMM pods land here via app=f5-tmm label. NetworkAttachmentDefinitions (ens7-ipvlan-l2 + ens8-ipvlan-l2) are a manual prerequisite until a dedicated NAD module ships."
+    "version": "0.3.0",
+    "name": "BNK 2.2 Platform + HP Nodes (AWS EKS — existing cluster)",
+    "description": "Adopt an existing AWS EKS cluster, add a dedicated HP TMM node pool (dual secondary ENIs), and install the BNK 2.2 platform."
   },
   "bnk_version": "2.2",
-  "compatibility": {
-    "supported_platform_profiles": [
-      "aws_eks"
-    ],
-    "required_capabilities": []
-  },
   "category": "bnk",
   "cloud_provider": "aws",
-  "platform_defaults": {
-    "eks": {
-      "container_platform": "Generic",
-      "storage_class_name": "gp3",
-      "cloud_provider": "aws",
-      "cni_type": "ipvlan",
-      "nad_cni_type": "ipvlan",
-      "nad_interface_name": "eth0",
-      "nad_ipvlan_mode": "l2",
-      "cert_manager_namespace": "cert-manager",
-      "flo_namespace": "f5-operator",
-      "flo_utils_namespace": "f5-utils"
-    }
+  "compatibility": {
+    "supported_platform_profiles": ["aws_eks"],
+    "required_capabilities": []
   },
   "icon": "Server",
   "color": "orange",
-  "estimated_time": "25-40 minutes (existing cluster + HP node pool + BNK install)",
-  "estimated_cost": "AWS usage-based — adds ~3× m5n.large nodes for the HP pool on top of the existing cluster",
+  "estimated_time": "25-40 minutes",
+  "estimated_cost": "AWS usage-based (adds ~3× m5n.large)",
   "difficulty": "advanced",
   "maturity": "alpha",
-  "tags": [
-    "aws",
-    "eks",
-    "kubernetes",
-    "cluster",
-    "register",
-    "hp-nodes",
-    "tmm",
-    "sriov",
-    "cert-manager",
-    "bnk-prereqs",
-    "flo",
-    "cneinstance",
-    "irsa"
-  ],
-  "outcomes": [
-    "An existing AWS EKS cluster is referenced by name and adopted into BNK Forge",
-    "Per-AZ TMM-external subnets (tagged f5-bnk-role=tmm-external) and TMM-internal subnets (tagged f5-bnk-role=tmm-internal) are created in the cluster VPC",
-    "A dedicated HP EKS managed node group is provisioned with app=f5-tmm label, IMDSv2-required launch template, EBS-encrypted root, m5n.large by default (SR-IOV + 100Gbps ENA)",
-    "Each HP node attaches two secondary ENIs at first boot: ens7 in TMM-external, ens8 in TMM-internal — both tagged node.k8s.amazonaws.com/no_manage=true",
-    "BNK namespaces, FAR pull secrets, and component manifest are deployed",
-    "Jetstack cert-manager is installed with BNK-compatible defaults",
-    "The BNK CA-backed ClusterIssuer is created and ready for FLO + OTEL certs",
-    "F5 Lifecycle Operator (FLO) is installed with AWS-tuned defaults; BNK CRDs are registered",
-    "CNEInstance is applied with AWS-specific cneController env vars + network_attachments=[ens7-ipvlan-l2, ens8-ipvlan-l2]; FLO schedules TMM pods onto HP nodes",
-    "AWS IRSA is wired for the CNE controller — IAM role + OIDC trust + SA annotation",
-    "BNKGateway CR (kind: F5BnkGateway) listener networks are auto-built from the HP-nodes TMM-external subnets via cneinstall's apply-time rediscovery"
-  ],
+  "tags": ["aws", "eks", "kubernetes", "bnk", "hp-nodes", "tmm"],
   "prerequisites": [
     {
       "type": "kubernetes_cluster",
-      "description": "An existing AWS EKS cluster reachable from the project. Use the 'AWS EKS Cluster Create' blueprint to provision one if you don't have it yet."
+      "description": "An existing AWS EKS cluster reachable from the project."
     },
     {
       "type": "credential_template",
       "name": "aws_credentials",
-      "description": "AWS credential template using any of Forge's three auth methods: access_keys (static IAM keys), profile (named AWS profile on the Forge runner), or sso (AWS SSO / Identity Center). All three resolve to the same access_key_id + secret_access_key + session_token at deploy time."
+      "description": "AWS credential template (any of Forge's three auth methods)."
     },
     {
       "type": "project_secret",
       "name": "cne_pull_secret",
-      "description": "Base64-encoded F5 FAR registry credentials (bare service-account JSON key OR dockerconfigjson). Bound from a stored project secret in the deploy form."
-    }
-  ],
-  "input_summary": [
+      "description": "F5 FAR registry credentials."
+    },
     {
-      "label": "Input guidance",
-      "value": "Provide AWS credentials, region, the existing EKS cluster name, and the F5 FAR pull secret. HP-node defaults (m5n.large × 1 per AZ, /24 TMM subnets carved from VPC at offset 200/210) work for most deployments; override if your VPC is tight on CIDR space or you need higher TMM throughput."
+      "type": "project_secret",
+      "name": "jwt_token",
+      "description": "F5 BNK License JWT."
     }
   ],
   "inputs": {
@@ -90,7 +46,7 @@
       {
         "name": "aws_access_key_id",
         "type": "string",
-        "description": "AWS access key ID. Auto-resolved from the AWS credential template regardless of auth method (access_keys / profile / sso).",
+        "description": "Auto-filled from the AWS credential template.",
         "sensitive": true,
         "source": "credential_template",
         "source_field": "aws_access_key_id",
@@ -99,7 +55,7 @@
       {
         "name": "aws_secret_access_key",
         "type": "string",
-        "description": "AWS secret access key. Auto-resolved from the AWS credential template regardless of auth method.",
+        "description": "Auto-filled from the AWS credential template.",
         "sensitive": true,
         "source": "credential_template",
         "source_field": "aws_secret_access_key",
@@ -108,7 +64,7 @@
       {
         "name": "aws_region",
         "type": "string",
-        "description": "AWS region where the existing EKS cluster resides.",
+        "description": "AWS region.",
         "source": "project",
         "source_field": "region",
         "order": 12
@@ -116,31 +72,15 @@
       {
         "name": "eks_cluster_name",
         "type": "string",
-        "description": "Name of the existing AWS EKS cluster to adopt.",
+        "description": "Name of the existing EKS cluster.",
         "order": 20
-      },
-      {
-        "name": "cne_pull_secret",
-        "type": "string",
-        "description": "F5 FAR registry credentials. Bind to a stored project secret in the deploy form.",
-        "sensitive": true,
-        "source": "user",
-        "order": 30
-      },
-      {
-        "name": "jwt_token",
-        "type": "string",
-        "description": "F5 BNK License JWT. Bind to a stored project secret in the deploy form.",
-        "sensitive": true,
-        "source": "user",
-        "order": 31
       }
     ],
     "optional": [
       {
         "name": "aws_session_token",
         "type": "string",
-        "description": "AWS session token. Populated for STS, SSO, and assumed-role-derived profiles; empty for long-lived IAM user keys.",
+        "description": "Auto-filled from the AWS credential template (STS/SSO only).",
         "default": "",
         "sensitive": true,
         "source": "credential_template",
@@ -148,107 +88,39 @@
         "order": 13
       },
       {
-        "name": "operator_namespace",
-        "type": "string",
-        "description": "Namespace for FLO and all BNK components.",
-        "default": "f5-operator",
-        "order": 40
-      },
-      {
-        "name": "utils_namespace",
-        "type": "string",
-        "description": "Namespace for utility components.",
-        "default": "f5-utils",
-        "order": 41
-      },
-      {
-        "name": "gateway_namespace",
-        "type": "string",
-        "description": "Namespace for Gateway API resources.",
-        "default": "bnk-gw",
-        "order": 42
-      },
-      {
-        "name": "bnk_manifest_version",
-        "type": "string",
-        "description": "BNK manifest version to download from FAR.",
-        "default": "2.2.1-3.2226.0-0.0.511",
-        "order": 50
-      },
-      {
-        "name": "license_mode",
-        "type": "string",
-        "description": "FLO license mode: 'connected' (talks to F5 license server) or 'f5licenseproxy' (talks to a local F5 License Proxy).",
-        "default": "connected",
-        "order": 60
-      },
-      {
-        "name": "container_platform",
-        "type": "string",
-        "description": "FLO containerPlatform value. AWS-tuned default; override only if you need to test against a different platform path in the FLO chart.",
-        "default": "AWS",
-        "order": 61
-      },
-      {
-        "name": "deployment_size",
-        "type": "string",
-        "description": "CNEInstance deploymentSize per F5 docs: Small / Medium / Large / Max (2/4/8/16 CPU, 4/8/16/25 GiB hugepages-2Mi).",
-        "default": "Small",
-        "order": 70
-      },
-      {
-        "name": "tmm_replicas",
-        "type": "number",
-        "description": "Number of TMM replicas. 0 = auto-derive from cluster topology: min(AZ count, worker node count). Set a positive number to override. Cluster admin still has to label nodes with app=f5-tmm for FLO to schedule TMM pods.",
-        "default": 0,
-        "order": 71
-      },
-      {
-        "name": "watch_namespaces",
-        "type": "list(string)",
-        "description": "Which namespaces the CNE controller watches for Gateway/HTTPRoute CRs. ['All'] watches everything.",
-        "default": [
-          "All"
-        ],
-        "order": 72
-      },
-      {
-        "name": "network_attachments",
-        "type": "list(string)",
-        "description": "NetworkAttachmentDefinition names attached to TMM. Default matches the dual-ENI HP node pool: ens7-ipvlan-l2 (external) and ens8-ipvlan-l2 (internal). Both NADs must exist on the cluster — see prerequisites.",
-        "default": [
-          "ens7-ipvlan-l2",
-          "ens8-ipvlan-l2"
-        ],
-        "order": 73
-      },
-      {
-        "name": "vip_cidr",
-        "type": "string",
-        "description": "CIDR for BNK Gateway VIP allocation. Module derives the BNKGateway CR (kind: F5BnkGateway) start/end addresses from this. Empty = let cneinstall auto-discover from the HP-nodes TMM-external subnets (typical for this blueprint). Set explicitly only if VIPs live outside the TMM-external CIDR range.",
-        "default": "",
-        "order": 81
-      },
-      {
         "name": "hp_instance_type",
         "type": "string",
-        "description": "EC2 instance type for HP nodes. Must support at least 3 ENIs (primary + 2 secondary). Default m5n.large is the minimum; consider m5n.xlarge / c5n.xlarge for higher TMM throughput.",
+        "description": "EC2 instance type for HP TMM nodes (must support 3 ENIs).",
         "default": "m5n.large",
-        "order": 90
+        "order": 30
       },
       {
         "name": "hp_node_count_per_az",
         "type": "number",
-        "description": "Desired HP nodes per AZ. Total HP nodes = this × availability_zone_count. Default 1 per AZ gives 1-TMM-per-AZ when tmm_replicas auto-derives.",
+        "description": "HP nodes per AZ.",
         "default": 1,
-        "order": 91
+        "order": 31
       },
       {
-        "name": "hp_node_disk_size_gb",
+        "name": "vip_cidr",
+        "type": "string",
+        "description": "CIDR for BNK Gateway VIP allocation. Empty = auto-discover from HP-nodes TMM-external subnets.",
+        "default": "",
+        "order": 40
+      },
+      {
+        "name": "tmm_replicas",
         "type": "number",
-        "description": "HP node root volume size.",
-        "default": 50,
-        "order": 92
+        "description": "TMM replicas. 0 = auto-derive from AZ × HP node count.",
+        "default": 0,
+        "order": 41
+      },
+      {
+        "name": "deployment_size",
+        "type": "string",
+        "description": "CNEInstance size: Small / Medium / Large / Max.",
+        "default": "Small",
+        "order": 42
       }
     ]
   },
@@ -256,7 +128,6 @@
     {
       "id": "cluster-register",
       "name": "EKS Cluster Register",
-      "description": "Reference an existing EKS cluster and emit BNK registration outputs.",
       "module": "modules/eks-cluster-register",
       "version": "1.1.0",
       "depends_on": [],
@@ -271,43 +142,32 @@
     {
       "id": "hp-nodes",
       "name": "HP TMM Node Pool",
-      "description": "Provision dedicated TMM-external + TMM-internal subnets per AZ, an HP EKS managed node group (m5n.large), and dual secondary ENIs (ens7 external + ens8 internal) on each node. cneinstall later rediscovers the tagged subnets to wire the BNKGateway CR's listener networks.",
       "module": "modules/eks-cluster-hp-nodes",
       "version": "0.3.0-alpha",
-      "depends_on": [
-        "cluster-register"
-      ],
+      "depends_on": ["cluster-register"],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
         "aws_secret_access_key": "${aws_secret_access_key}",
         "aws_session_token": "${aws_session_token}",
         "aws_region": "${aws_region}",
         "instance_type": "${hp_instance_type}",
-        "node_count_per_az": "${hp_node_count_per_az}",
-        "node_disk_size_gb": "${hp_node_disk_size_gb}"
+        "node_count_per_az": "${hp_node_count_per_az}"
       }
     },
     {
       "id": "install-multus",
       "name": "Install Multus CNI",
-      "description": "Cloud-agnostic Multus CNI install (vendored from bnk-forge-catalog-shared). Applies the upstream multus-daemonset manifest, waits for the NetworkAttachmentDefinition CRD + DaemonSet rollout. Pre-requisite for tmm-nads.",
       "module": "modules/eks-cluster-install-multus",
       "version": "0.2.0-alpha",
-      "depends_on": [
-        "hp-nodes"
-      ],
+      "depends_on": ["hp-nodes"],
       "inputs": {}
     },
     {
       "id": "tmm-nads",
-      "name": "TMM NADs (ens7/ens8 NetworkAttachmentDefinitions)",
-      "description": "Create the ens7-ipvlan-l2 + ens8-ipvlan-l2 NetworkAttachmentDefinitions TMM needs for its dual data-plane interfaces. Each NAD's static-address placeholder is derived from the matching f5-bnk-role-tagged subnet via apply-time discovery — no hardcoded 10.10.1.1/24.",
+      "name": "TMM NADs (ens7/ens8)",
       "module": "modules/eks-cluster-install-tmm-nads",
       "version": "0.3.0-alpha",
-      "depends_on": [
-        "hp-nodes",
-        "install-multus"
-      ],
+      "depends_on": ["hp-nodes", "install-multus"],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
         "aws_secret_access_key": "${aws_secret_access_key}",
@@ -318,78 +178,47 @@
     {
       "id": "bnk-prereqs",
       "name": "BNK Prerequisites",
-      "description": "Create BNK namespaces, FAR image pull secrets, and download the BNK manifest.",
       "module": "modules/eks-cluster-install-bnk-prereqs",
       "version": "1.0.0",
-      "depends_on": [
-        "cluster-register",
-        "hp-nodes",
-        "install-multus",
-        "tmm-nads"
-      ],
+      "depends_on": ["cluster-register", "hp-nodes", "install-multus", "tmm-nads"],
       "inputs": {
-        "cne_pull_secret": "${cne_pull_secret}",
-        "operator_namespace": "${operator_namespace}",
-        "utils_namespace": "${utils_namespace}",
-        "gateway_namespace": "${gateway_namespace}",
-        "bnk_manifest_version": "${bnk_manifest_version}",
         "cluster_name": "${eks_cluster_name}"
       }
     },
     {
       "id": "cert-manager",
       "name": "Cert-Manager",
-      "description": "Install Jetstack cert-manager with BNK-compatible defaults.",
       "module": "modules/eks-cluster-install-cert-manager",
       "version": "3.1.0",
-      "depends_on": [
-        "bnk-prereqs"
-      ],
+      "depends_on": ["bnk-prereqs"],
       "inputs": {
-        "cluster_name": "${eks_cluster_name}",
-        "bnk_namespace": "${operator_namespace}"
+        "cluster_name": "${eks_cluster_name}"
       }
     },
     {
       "id": "cert-issuer",
       "name": "BNK Cert Issuer",
-      "description": "Create the BNK-managed self-signed CA and ClusterIssuer used by FLO + OTEL certs.",
       "module": "modules/eks-cluster-install-cert-issuer",
       "version": "1.0.0",
-      "depends_on": [
-        "cert-manager"
-      ],
-      "inputs": {
-        "instance_namespace": "${operator_namespace}"
-      }
+      "depends_on": ["cert-manager"],
+      "inputs": {}
     },
     {
       "id": "flo",
       "name": "F5 Lifecycle Operator",
-      "description": "Install FLO via Helm with AWS-tuned defaults (containerPlatform=AWS, fluentbit sidecar disabled, IPAM operator in default ns). Registers BNK CRDs.",
       "module": "modules/eks-cluster-install-flo",
       "version": "2.0.0",
-      "depends_on": [
-        "cert-issuer"
-      ],
+      "depends_on": ["cert-issuer"],
       "inputs": {
-        "flo_namespace": "${operator_namespace}",
-        "cluster_name": "${eks_cluster_name}",
-        "jwt_token": "${jwt_token}",
-        "license_mode": "${license_mode}",
-        "container_platform": "${container_platform}"
+        "cluster_name": "${eks_cluster_name}"
       }
     },
     {
       "id": "cneinstall",
       "name": "CNEInstance + IRSA",
-      "description": "Apply the CNEInstance CR with AWS production defaults, the cloud-network-mapping ConfigMap, the BNKGateway CR (kind: F5BnkGateway) for VIP IPAM (when vip_cidr is set), and wire AWS IRSA for the CNE controller (IAM role + SA annotation + rollout-restart).",
       "module": "modules/eks-cluster-cneinstall",
       "version": "1.1.0",
-      "depends_on": [
-        "flo",
-        "tmm-nads"
-      ],
+      "depends_on": ["flo", "tmm-nads"],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
         "aws_secret_access_key": "${aws_secret_access_key}",
@@ -397,9 +226,8 @@
         "aws_region": "${aws_region}",
         "deployment_size": "${deployment_size}",
         "tmm_replicas": "${tmm_replicas}",
-        "watch_namespaces": "${watch_namespaces}",
-        "network_attachments": "${network_attachments}",
-        "vip_cidr": "${vip_cidr}"
+        "vip_cidr": "${vip_cidr}",
+        "network_attachments": ["ens7-ipvlan-l2", "ens8-ipvlan-l2"]
       }
     }
   ]
