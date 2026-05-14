@@ -1,86 +1,105 @@
 # eks-cluster-hp-nodes
 
-Add a dedicated high-performance EKS managed node group to an existing cluster for hosting TMM data-plane pods. Optional addition to both AWS EKS blueprints.
+Add a dedicated high-performance EKS managed node group with the **3-interface TMM model**: CNI + external + internal. Used by the `aws-eks-existing-cluster-with-hp-nodes` and `aws-eks-cluster-create-with-hp-nodes` blueprints.
 
-## When to use this module
+## TMM interface model
 
-Add this when you need TMM to actually pass traffic. The base blueprints (`aws-eks-cluster-existing` and `aws-eks-cluster-create`) provision a cluster + the BNK control plane, but TMM pods need:
+Each TMM pod on an HP node gets three interfaces:
 
-1. Nodes labelled `app=f5-tmm` (so FLO schedules TMM on them).
-2. A second ENI in a "TMM-external" subnet — the data-plane interface that VPC CNI must ignore (`node.k8s.amazonaws.com/no_manage=true`).
-3. NetworkAttachmentDefinition (`ens7-ipvlan-l2` by default) that binds to that second ENI.
+| Interface | Where it lives | Purpose | NAD |
+|---|---|---|---|
+| `eth0` (CNI) | Pod network (VPC CNI on `ens5`, the node's primary ENI) | Cluster control-plane traffic, kubelet liveness, service discovery | — (managed by VPC CNI) |
+| `net1` | Secondary ENI on TMM-external subnet (`ens7` by default) | **Client-facing data plane** — incoming traffic to BNK VIPs | `ens7-ipvlan-l2` |
+| `net2` | Secondary ENI on TMM-internal subnet (`ens8` by default) | **Backend-facing data plane** — outgoing traffic to origin pods/services | `ens8-ipvlan-l2` |
 
-This module covers #1 and #2 declaratively. #3 is part of the BNK manifest applied by `bnk-prereqs`.
+The bootstrap user-data attaches both secondary ENIs at first boot, tagging them `node.k8s.amazonaws.com/no_manage=true` so AWS VPC CNI ignores them.
+
+> **NAD prerequisite:** `ens7-ipvlan-l2` and `ens8-ipvlan-l2` NetworkAttachmentDefinitions must exist on the cluster. They're created manually per the F5 install guide today; a NAD-provisioning module will land in a future PR.
 
 ## What it builds
 
 | Resource | Purpose |
 |---|---|
-| `aws_subnet.tmm[*]` | One per AZ. Tagged `f5-bnk-role=tmm-external` so `cneinstall` auto-builds the BNKGateway CR. |
-| `aws_iam_role.hp_node` + worker/CNI/registry policies | Standard EKS node role. |
-| `aws_iam_role_policy.hp_node_eni` (inline) | Scoped ENI-management permissions — `CreateNetworkInterface`, `AttachNetworkInterface`, `ModifyNetworkInterfaceAttribute`, `AssignPrivateIpAddresses`, `CreateTags`. Used by the bootstrap script. |
-| `aws_launch_template.hp` | IMDSv2-required, EBS-encrypted, custom user-data. MIME-multipart so EKS's own bootstrap still runs. |
-| `aws_eks_node_group.hp` | Dedicated managed NG. Default `m5n.large` (SR-IOV + 100Gbps ENA), `app=f5-tmm` label, optional taints. |
+| `aws_subnet.tmm_external[*]` (per AZ) | Tagged `f5-bnk-role=tmm-external` — cneinstall rediscovers these at apply time to build BNKGateway CR listener networks |
+| `aws_subnet.tmm_internal[*]` (per AZ) | Tagged `f5-bnk-role=tmm-internal` — for future NAD-provisioning module |
+| `aws_iam_role.hp_node` + worker/CNI/registry policies | Standard EKS node role |
+| `aws_iam_role_policy.hp_node_eni` (inline) | Scoped ENI-management permissions (`CreateNetworkInterface`, `AttachNetworkInterface`, `ModifyNetworkInterfaceAttribute`, `AssignPrivateIpAddresses`, `CreateTags`) |
+| `aws_launch_template.hp` | IMDSv2-required, EBS-encrypted, MIME-multipart user-data that bootstraps both secondary ENIs |
+| `aws_eks_node_group.hp` | Dedicated managed NG. Default `m5n.large` (supports 3 ENIs total: primary + 2 secondary), `app=f5-tmm` label, optional taints |
 
-## How the secondary ENI bootstraps
+## Bootstrap flow
 
-`manifests/launch-template-userdata.sh.tftpl` runs on first boot inside each HP node. It:
+`manifests/launch-template-userdata.sh.tftpl` runs on first boot (before EKS's own bootstrap):
 
-1. Reads IMDSv2 for instance ID + AZ + region.
-2. Picks the AZ-matching TMM subnet from a Terraform-rendered map.
-3. `aws ec2 create-network-interface` in that subnet, tagged `node.k8s.amazonaws.com/no_manage=true` so AWS VPC CNI leaves it alone.
-4. `aws ec2 attach-network-interface --device-index 2` (→ `ens7` on AL2023).
-5. `modify-network-interface-attribute` to set `DeleteOnTermination=true` so the ENI doesn't leak when the ASG cycles the instance.
-6. Polls `ip link` until the kernel registers the new interface — gives the kubelet a clean device list when it starts.
+1. IMDSv2 → instance ID + AZ + region
+2. Pick AZ-matching external + internal TMM subnets from Terraform-rendered maps
+3. **`aws ec2 create-network-interface`** in TMM-external subnet, tagged `no_manage=true` + `f5-bnk:tmm-role=external`
+4. **`aws ec2 attach-network-interface --device-index 2`** → `ens7` on AL2023
+5. **`modify-network-interface-attribute`** to set `DeleteOnTermination=true`
+6. Same sequence for the internal ENI: `device-index 3` → `ens8`, tagged `f5-bnk:tmm-role=internal`
+7. Poll `ip link` until the kernel registers BOTH new interfaces
 
-The MIME-multipart format wraps this so EKS's own bootstrap (kubelet bring-up, cluster join) runs after ours.
+The MIME-multipart format wraps this so EKS's own bootstrap (kubelet bring-up, cluster join) still runs after.
 
-Default `device_index = 2` matches the `ens7` device name and the standard `NetworkAttachmentDefinition` (`master: ens7`). Override `secondary_eni_device_index` only if you've also overridden the NAD.
+## Instance type constraint
+
+The instance must support at least **3 total ENIs** (1 primary + 2 secondary):
+
+| Type | Total ENIs | Notes |
+|---|---|---|
+| `m5n.large` (default) | 3 | Minimum that works. SR-IOV + 100Gbps ENA. |
+| `m5n.xlarge`, `c5n.xlarge` | 4 | Room to grow. |
+| `m5n.2xlarge`, `c5n.2xlarge` | 4 | Higher CPU/memory. |
+| `c5n.large` | 3 | Compute-optimised alternative. |
+| `t3.medium` | 3 | NOT recommended — burstable CPU is wrong for TMM data-plane. |
+
+Reference: AWS [ENI per instance type table](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html#AvailableIpPerENI).
 
 ## Inputs
 
 | Name | Source | Required | Default | Description |
 |---|---|---|---|---|
-| `aws_*` creds | AWS credential template | Yes | — | Any of Forge's three auth methods (`access_keys` / `profile` / `sso`). |
+| `aws_*` creds | AWS credential template | Yes | — | Any of Forge's three auth methods. |
 | `aws_region` | User / project | Yes | — | Region. |
-| `eks_cluster_name` | Upstream module | Yes | — | Cluster to attach the HP NG to. Auto-wired from `cluster-register` or `cluster-create`. |
+| `eks_cluster_name` | Upstream module | Yes | — | Cluster to attach the HP NG to. |
 | `vpc_id` | Upstream module | Yes | — | Cluster VPC. |
-| `vpc_cidr` | Upstream module | Yes | — | For auto-carving TMM subnets when `tmm_subnet_cidrs` is empty. |
-| `availability_zones` | Upstream module | Yes | — | AZs to spread HP nodes across. |
-| `node_subnet_ids` | Upstream module | Yes | — | Where the HP node group places its **primary** ENI. Auto-wires from the upstream cluster module's `subnet_ids` (register) or `private_subnet_ids` (create). |
-| `tmm_subnet_cidrs` | User | No | `[]` → auto-carve | Override per-AZ TMM subnet CIDRs. |
-| `tmm_subnet_newbits` | User | No | `8` | `cidrsubnet()` newbits when auto-carving. |
-| `tmm_subnet_index_offset` | User | No | `200` | Subnet index offset to avoid colliding with worker subnets. |
-| `instance_type` | User | No | `m5n.large` | EC2 type. SR-IOV-capable. |
-| `node_count_per_az` | User | No | `1` | Set `0` to skip the NG entirely (subnets still created). |
-| `node_disk_size_gb` | User | No | `50` | Root volume. |
-| `secondary_eni_device_index` | User | No | `2` | Bootstrapped ENI device index. |
-| `additional_ips_per_eni` | User | No | `0` | Extra IPs on the secondary ENI at creation. `0` = let cneinstall's IPAM manage. |
-| `node_label_app` | User | No | `f5-tmm` | `app=<this>` label on HP nodes. |
-| `node_taints` | User | No | `[]` | Optional taints to dedicate the pool. |
-| `tag_subnets_for_tmm` | User | No | `true` | Tag TMM subnets `f5-bnk-role=tmm-external` for cneinstall auto-discovery. |
+| `vpc_cidr` | Upstream module | Yes | — | For auto-carving TMM subnets. |
+| `availability_zones` | Upstream module | Yes | — | AZs to spread across. |
+| `node_subnet_ids` | Upstream module | Yes | — | Where HP nodes place their **primary** ENI. |
+| `tmm_external_subnet_cidrs` | User | No | `[]` → auto-carve | Explicit override per-AZ. |
+| `tmm_internal_subnet_cidrs` | User | No | `[]` → auto-carve | Explicit override per-AZ. |
+| `tmm_external_subnet_index_offset` | User | No | `200` | `cidrsubnet` offset for external auto-carve. |
+| `tmm_internal_subnet_index_offset` | User | No | `210` | `cidrsubnet` offset for internal auto-carve. |
+| `instance_type` | User | No | `m5n.large` | Must support ≥ 3 ENIs. |
+| `node_count_per_az` | User | No | `1` | Set `0` to skip the NG (subnets still created). |
+| `external_eni_device_index` | User | No | `2` | `ens7` on AL2023 — matches `ens7-ipvlan-l2` NAD. |
+| `internal_eni_device_index` | User | No | `3` | `ens8` on AL2023 — matches `ens8-ipvlan-l2` NAD. |
+| `additional_ips_per_eni` | User | No | `0` | Extra IPs on each secondary ENI. `0` = let cneinstall IPAM manage. |
+| `node_label_app` | User | No | `f5-tmm` | `app=<value>` on HP nodes. |
+| `node_taints` | User | No | `[]` | Optional dedication. |
+| `tag_subnets_for_tmm` | User | No | `true` | Apply `f5-bnk-role=tmm-external` / `tmm-internal` tags. |
 
 ## Outputs
 
 | Output | Used by |
 |---|---|
-| `tmm_subnet_ids`, `tmm_subnet_ids_by_az`, `tmm_subnet_cidrs` | Cross-referencing |
-| `tmm_external_subnets_by_az` | `cneinstall` — override its same-named input when chaining HP-nodes ahead of cneinstall to point the BNKGateway CR at these subnets. |
-| `hp_node_group_arn`, `hp_node_group_name`, `hp_node_count`, `hp_node_role_arn`, `launch_template_id` | Diagnostics, downstream IRSA |
+| `tmm_external_subnet_ids`, `_by_az`, `_cidrs`, `tmm_external_subnets_by_az` | Diagnostics; cneinstall rediscovers via tag |
+| `tmm_internal_subnet_ids`, `_by_az`, `_cidrs`, `tmm_internal_subnets_by_az` | Diagnostics; future NAD-provisioning module |
+| `hp_node_group_arn`, `_name`, `hp_node_count`, `hp_node_role_arn`, `launch_template_id` | Diagnostics; downstream IRSA |
 
 ## Cost considerations
 
 This module adds material AWS cost on top of the base cluster:
 
-- 3× HP nodes (default `m5n.large` ≈ $0.14/hr each = ~$300/mo).
-- Secondary ENIs (free, but each one consumes a private IP from the TMM subnet).
-- TMM subnets (no cost themselves; reserve VPC IP space).
+- 3× HP nodes (default `m5n.large` ≈ $0.14/hr each ≈ $300/mo)
+- 6× secondary ENIs (free, but each consumes a private IP from a TMM subnet)
+- 6× TMM subnets (no direct cost; reserve VPC IP space)
 
-For pre-production validation use `node_count_per_az = 0` to validate the subnet + IAM + LT plumbing without spinning real nodes.
+For pre-production validation, set `node_count_per_az = 0` to validate the subnet + IAM + LT plumbing without running real nodes.
 
 ## Known limitations
 
-- **Destroy-time orphans.** ENIs created by the bootstrap script are marked `DeleteOnTermination=true`, so they go away when the EC2 instance terminates. But if a manual `aws ec2 detach-network-interface` ran beforehand, or the cluster's VPC CNI somehow grabbed the ENI before our tag landed, the ENI may leak. After `tofu destroy` run a quick cleanup:
+- **Destroy-time orphan risk.** Secondary ENIs are marked `DeleteOnTermination=true`, so they go away when the EC2 instance terminates. If something has detached an ENI before destroy, the ENI may leak. After `tofu destroy`, sweep:
   ```bash
   aws ec2 describe-network-interfaces \
     --filters "Name=tag:bnk-forge:cluster,Values=<cluster>" \
@@ -89,12 +108,12 @@ For pre-production validation use `node_count_per_az = 0` to validate the subnet
     --output text \
     | xargs -r -n1 aws ec2 delete-network-interface --network-interface-id
   ```
-- **First-boot race.** If the AWS API is slow, the kubelet may start before the ENI is registered by the kernel. The user-data polls `ip link` for up to 30s; bump that loop if your region is flaky.
-- **AMI release version.** Default = latest stable AL2023 for the cluster's K8s minor. Pin via `eks_ami_release_version` if you need byte-for-byte reproducible nodes.
-- **Taints opt-in.** No taints by default — TMM pods land here via `app=f5-tmm` label match, but other pods may also land here. Add taints to lock the pool.
+- **First-boot race.** If the AWS API is slow, the kubelet may start before the second ENI is registered. The user-data polls `ip link` for both interfaces for up to 30s.
+- **AMI release version.** Default = latest stable AL2023 for the cluster's K8s minor. Pin via `eks_ami_release_version` for byte-for-byte reproducibility.
+- **NAD prerequisite.** `ens7-ipvlan-l2` and `ens8-ipvlan-l2` must exist on the cluster before TMM pods can start. Apply manually per the F5 install guide for now; a NAD-provisioning module is a follow-up.
 
 ## Maturity
 
-`alpha` — implements the F5 dedicated-HP-node pattern but has not yet been validated end-to-end against a live AWS account. Specifically the user-data bootstrap timing (ENI attach before kubelet) and the AL2023 device-name mapping (`device_index=2 → ens7`) are correct on paper from F5/AWS docs but need a real run.
+`alpha` — implements the F5 dedicated-HP-node pattern with the generic 3-interface TMM model. Has not been validated end-to-end against a live AWS account yet. Specifically the bootstrap timing (both ENIs attached before kubelet) and AL2023 device-name mapping (`device_index=2 → ens7`, `3 → ens8`) are correct per F5 + AWS docs but need a real run.
 
-Moves to `beta` after a successful end-to-end deploy. Moves to `1.0.0` after the same checks both blueprints need.
+Moves to `beta` after first successful end-to-end deploy via either `-with-hp-nodes` blueprint. Moves to `1.0.0` alongside both base blueprints once everything is validated.

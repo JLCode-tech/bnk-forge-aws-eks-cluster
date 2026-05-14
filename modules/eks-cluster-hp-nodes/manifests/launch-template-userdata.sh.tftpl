@@ -1,15 +1,17 @@
 #!/bin/bash
 # =============================================================================
-# HP-nodes bootstrap user-data
+# HP-nodes dual-ENI bootstrap
 # =============================================================================
-# Runs on first boot. Adds a secondary ENI from the AZ-matching TMM subnet so
-# TMM data-plane traffic stays on a dedicated interface that AWS VPC CNI
-# ignores (node.k8s.amazonaws.com/no_manage=true).
+# Attaches TWO secondary ENIs at first boot — one from the AZ-matching TMM-
+# external subnet (→ ens7 by default) and one from the AZ-matching TMM-
+# internal subnet (→ ens8). Both carry node.k8s.amazonaws.com/no_manage=true
+# so AWS VPC CNI ignores them and TMM-managed CNI / NADs (ens7-ipvlan-l2 /
+# ens8-ipvlan-l2) can bind cleanly.
 #
-# This script must run BEFORE the EKS bootstrap script (which the parent MIME
-# multipart includes). The interface needs to exist when the kubelet starts so
-# Multus + the NetworkAttachmentDefinition (master: ens${secondary_eni_device_index + 5})
-# bind correctly.
+# This runs BEFORE EKS's bootstrap (the parent MIME multipart includes
+# EKS's own boot.sh as a separate part that fires after this script). The
+# interfaces need to exist when the kubelet starts so Multus + NADs bind
+# correctly.
 # =============================================================================
 
 set -euo pipefail
@@ -32,65 +34,90 @@ REGION=$(IMDS placement/region)
 
 echo "[hp-nodes] instance=$INSTANCE_ID az=$AZ region=$REGION"
 
-# AZ → TMM subnet mapping is rendered by Terraform from the
-# tmm_subnet_id_by_az local. Format: one bash case branch per AZ.
-declare -A TMM_SUBNET_BY_AZ
-%{ for az, subnet_id in tmm_subnet_by_az ~}
-TMM_SUBNET_BY_AZ["${az}"]="${subnet_id}"
+# AZ → subnet maps rendered by Terraform from the tmm_*_subnet_by_az locals.
+declare -A TMM_EXTERNAL_SUBNET_BY_AZ
+%{ for az, subnet_id in tmm_external_subnet_by_az ~}
+TMM_EXTERNAL_SUBNET_BY_AZ["${az}"]="${subnet_id}"
 %{ endfor ~}
 
-TMM_SUBNET="$${TMM_SUBNET_BY_AZ[$AZ]:-}"
-if [[ -z "$TMM_SUBNET" ]]; then
-  echo "[hp-nodes] FATAL: no TMM subnet defined for AZ $AZ"
+declare -A TMM_INTERNAL_SUBNET_BY_AZ
+%{ for az, subnet_id in tmm_internal_subnet_by_az ~}
+TMM_INTERNAL_SUBNET_BY_AZ["${az}"]="${subnet_id}"
+%{ endfor ~}
+
+TMM_EXTERNAL_SUBNET="$${TMM_EXTERNAL_SUBNET_BY_AZ[$AZ]:-}"
+TMM_INTERNAL_SUBNET="$${TMM_INTERNAL_SUBNET_BY_AZ[$AZ]:-}"
+
+if [[ -z "$TMM_EXTERNAL_SUBNET" ]]; then
+  echo "[hp-nodes] FATAL: no TMM-external subnet defined for AZ $AZ"
   exit 1
 fi
-echo "[hp-nodes] tmm_subnet=$TMM_SUBNET device_index=${secondary_eni_device_index}"
+if [[ -z "$TMM_INTERNAL_SUBNET" ]]; then
+  echo "[hp-nodes] FATAL: no TMM-internal subnet defined for AZ $AZ"
+  exit 1
+fi
 
-# Create the ENI in the TMM subnet, tagged so VPC CNI ignores it.
-ADDITIONAL_IPS_FLAG=""
+echo "[hp-nodes] tmm_external_subnet=$TMM_EXTERNAL_SUBNET device_index=${external_eni_device_index}"
+echo "[hp-nodes] tmm_internal_subnet=$TMM_INTERNAL_SUBNET device_index=${internal_eni_device_index}"
+
+# attach_secondary_eni <subnet_id> <device_index> <role>
+#   role is "external" | "internal" — used for ENI tags and log lines
+attach_secondary_eni() {
+  local SUBNET="$1"
+  local DEVICE_INDEX="$2"
+  local ROLE="$3"
+
+  local ADDITIONAL_IPS_FLAG=""
 %{ if additional_ips_per_eni > 0 ~}
-ADDITIONAL_IPS_FLAG="--secondary-private-ip-address-count ${additional_ips_per_eni}"
+  ADDITIONAL_IPS_FLAG="--secondary-private-ip-address-count ${additional_ips_per_eni}"
 %{ endif ~}
 
-ENI_ID=$(aws ec2 create-network-interface \
-  --region "$REGION" \
-  --subnet-id "$TMM_SUBNET" \
-  --description "tmm-eni-$INSTANCE_ID" \
-  --tag-specifications "ResourceType=network-interface,Tags=[\
+  local ENI_ID
+  ENI_ID=$(aws ec2 create-network-interface \
+    --region "$REGION" \
+    --subnet-id "$SUBNET" \
+    --description "tmm-$${ROLE}-eni-$INSTANCE_ID" \
+    --tag-specifications "ResourceType=network-interface,Tags=[\
 {Key=node.k8s.amazonaws.com/no_manage,Value=true},\
+{Key=f5-bnk:tmm-role,Value=$${ROLE}},\
 {Key=bnk-forge:module,Value=eks-cluster-hp-nodes},\
 {Key=bnk-forge:cluster,Value=${eks_cluster_name}},\
-{Key=Name,Value=tmm-eni-$INSTANCE_ID}]" \
-  $ADDITIONAL_IPS_FLAG \
-  --query 'NetworkInterface.NetworkInterfaceId' \
-  --output text)
+{Key=Name,Value=tmm-$${ROLE}-eni-$INSTANCE_ID}]" \
+    $ADDITIONAL_IPS_FLAG \
+    --query 'NetworkInterface.NetworkInterfaceId' \
+    --output text)
 
-echo "[hp-nodes] created eni=$ENI_ID"
+  echo "[hp-nodes] created $${ROLE} eni=$ENI_ID"
 
-# Attach with auto-delete-on-instance-terminate so the ENI doesn't leak when
-# the ASG cycles the instance.
-ATTACHMENT_ID=$(aws ec2 attach-network-interface \
-  --region "$REGION" \
-  --network-interface-id "$ENI_ID" \
-  --instance-id "$INSTANCE_ID" \
-  --device-index ${secondary_eni_device_index} \
-  --query 'AttachmentId' \
-  --output text)
+  local ATTACHMENT_ID
+  ATTACHMENT_ID=$(aws ec2 attach-network-interface \
+    --region "$REGION" \
+    --network-interface-id "$ENI_ID" \
+    --instance-id "$INSTANCE_ID" \
+    --device-index "$DEVICE_INDEX" \
+    --query 'AttachmentId' \
+    --output text)
 
-aws ec2 modify-network-interface-attribute \
-  --region "$REGION" \
-  --network-interface-id "$ENI_ID" \
-  --attachment "AttachmentId=$ATTACHMENT_ID,DeleteOnTermination=true"
+  aws ec2 modify-network-interface-attribute \
+    --region "$REGION" \
+    --network-interface-id "$ENI_ID" \
+    --attachment "AttachmentId=$ATTACHMENT_ID,DeleteOnTermination=true"
 
-echo "[hp-nodes] attached eni=$ENI_ID device_index=${secondary_eni_device_index} attachment=$ATTACHMENT_ID (delete-on-termination=true)"
+  echo "[hp-nodes] attached $${ROLE} eni=$ENI_ID device_index=$DEVICE_INDEX attachment=$ATTACHMENT_ID (delete-on-termination=true)"
+}
 
-# Wait for the kernel to register the interface — gives the kubelet a clean
-# device list when it starts. AL2023 names it predictably by device index:
-# device_index=0 → ens5, 1 → ens6, 2 → ens7, ...
-EXPECTED_IF="ens$((${secondary_eni_device_index} + 5))"
+attach_secondary_eni "$TMM_EXTERNAL_SUBNET" "${external_eni_device_index}" "external"
+attach_secondary_eni "$TMM_INTERNAL_SUBNET" "${internal_eni_device_index}" "internal"
+
+# Wait for the kernel to register both interfaces. AL2023 names them
+# predictably: device_index N → ens(N+5).
+EXPECTED_EXT_IF="ens$((${external_eni_device_index} + 5))"
+EXPECTED_INT_IF="ens$((${internal_eni_device_index} + 5))"
+
 for _ in $(seq 1 30); do
-  if ip link show "$EXPECTED_IF" >/dev/null 2>&1; then
-    echo "[hp-nodes] kernel registered $EXPECTED_IF"
+  if ip link show "$EXPECTED_EXT_IF" >/dev/null 2>&1 \
+     && ip link show "$EXPECTED_INT_IF" >/dev/null 2>&1; then
+    echo "[hp-nodes] kernel registered $EXPECTED_EXT_IF + $EXPECTED_INT_IF"
     break
   fi
   sleep 1

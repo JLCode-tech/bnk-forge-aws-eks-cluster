@@ -18,10 +18,18 @@ After apply succeeds, Forge auto-registers your EKS cluster in its Kubernetes in
 
 ## Blueprints
 
-| Blueprint | When to use | Status |
+Four blueprints across the **existing vs. greenfield** × **with vs. without HP nodes** matrix. Pick the one matching your starting point and TMM-throughput needs.
+
+|   | No HP nodes — TMM on existing/default cluster nodes | With HP nodes — dedicated pool, 3-iface TMM |
 |---|---|---|
-| [`blueprints/aws-eks-existing-cluster`](./blueprints/aws-eks-existing-cluster) | You already have an EKS cluster (provisioned by Terraform, the AWS console, eksctl, etc.) and want Forge to adopt it and lay down the BNK stack on top. | Implemented end-to-end (`maturity: beta`) — moves to 1.0.0 after integration testing |
-| [`blueprints/aws-eks-cluster-create`](./blueprints/aws-eks-cluster-create) | You want Forge to provision a new EKS cluster end-to-end (VPC, subnets, node group, BNK stack) using the `terraform-aws-modules` community baseline. | Implemented end-to-end (`maturity: beta`) — moves to 1.0.0 after integration testing |
+| **Existing cluster** | [`aws-eks-existing-cluster`](./blueprints/aws-eks-existing-cluster) (`beta`) | [`aws-eks-existing-cluster-with-hp-nodes`](./blueprints/aws-eks-existing-cluster-with-hp-nodes) (`alpha`) |
+| **Greenfield cluster** | [`aws-eks-cluster-create`](./blueprints/aws-eks-cluster-create) (`beta`) | [`aws-eks-cluster-create-with-hp-nodes`](./blueprints/aws-eks-cluster-create-with-hp-nodes) (`alpha`) |
+
+**Differences:**
+- **Existing vs greenfield** — step 1 either adopts an existing cluster (`eks-cluster-register`) or provisions a new VPC + EKS + default node group (`eks-cluster-create`). Outputs match so the rest of the chain is identical.
+- **No HP vs HP** — HP variants insert `eks-cluster-hp-nodes` between cluster provisioning and `bnk-prereqs`: per-AZ TMM-external + TMM-internal subnets, dedicated `m5n.large` node pool, dual secondary ENIs per node (`ens7` + `ens8`), `app=f5-tmm` label. Without HP nodes, TMM runs on default cluster nodes and you must manually attach a secondary ENI per the F5 install guide. HP variants default `network_attachments: ["ens7-ipvlan-l2", "ens8-ipvlan-l2"]` (both NADs); non-HP variants default to `["ens7-ipvlan-l2"]` (single NAD, assumes manual ENI attach).
+
+All four blueprints move to `1.0.0` together once each has been validated end-to-end against a live AWS account.
 
 ## Modules
 
@@ -36,7 +44,7 @@ Implementation status across the AWS-specific deployment chain:
 | [`modules/eks-cluster-install-flo`](./modules/eks-cluster-install-flo) | F5 Lifecycle Operator install via Helm with AWS-tuned values (containerPlatform=AWS, fluentbit disabled, IPAM operator in default ns). Registers BNK CRDs and carries the BNK license block — license activation happens here, no separate License CR. | Implemented |
 | [`modules/eks-cluster-cneinstall`](./modules/eks-cluster-cneinstall) | CNEInstance CR with AWS production defaults (CLOUD_PROVIDER=aws, TMM_DEFAULT_MTU=9000, PAL_CPU_SET=0,2), cloud-network-mapping ConfigMap, BNKGateway CR (kind: F5BnkGateway) for VIP IPAM, and IRSA for the CNE controller. | Implemented |
 | [`modules/eks-cluster-create`](./modules/eks-cluster-create) | VPC + subnets + EKS cluster + managed node group (alternate to register). Wraps `terraform-aws-modules/vpc/aws` and `terraform-aws-modules/eks/aws` so production hardening (IMDSv2, EBS encryption, OIDC, control-plane logging) comes from a widely-audited community baseline. | Implemented (beta) |
-| [`modules/eks-cluster-hp-nodes`](./modules/eks-cluster-hp-nodes) | **Optional** add-on for both blueprints. Dedicated high-performance EKS managed node group for TMM data-plane pods: per-AZ TMM subnets (tagged `f5-bnk-role=tmm-external`), m5n/c5n nodes with IMDSv2 + EBS encryption + secondary-ENI bootstrap user-data, `app=f5-tmm` label. Works for both greenfield (cluster-create) and brownfield (cluster-register). | Implemented (alpha) |
+| [`modules/eks-cluster-hp-nodes`](./modules/eks-cluster-hp-nodes) | Dedicated high-performance EKS managed node group for TMM data-plane pods with the **3-interface model** (CNI + ens7 external + ens8 internal). Per-AZ TMM-external + TMM-internal subnets (tagged `f5-bnk-role=tmm-external` / `tmm-internal`), m5n/c5n nodes with IMDSv2 + EBS encryption + dual-ENI bootstrap user-data, `app=f5-tmm` label. Used by the two `-with-hp-nodes` variant blueprints. | Implemented (alpha) |
 
 ## AWS credentials
 
