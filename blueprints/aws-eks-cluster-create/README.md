@@ -10,11 +10,12 @@ Provision a brand-new AWS EKS cluster end-to-end and lay down the BNK control pl
 | 2 | `eks-cluster-install-bnk-prereqs` — namespaces, FAR pull secrets, manifest | Implemented (vendored) |
 | 3 | `eks-cluster-install-cert-manager` — install Jetstack cert-manager | Implemented (vendored) |
 | 4 | `eks-cluster-install-cert-issuer` — BNK CA + ClusterIssuer | Implemented (vendored) |
-| 5 | `eks-cluster-install-flo` — install F5 Lifecycle Operator via Helm (AWS-tuned values) | Implemented |
+| 5 | `eks-cluster-install-flo` — install F5 Lifecycle Operator via Helm (AWS-tuned values); license activation happens here (JWT is part of FLO's Helm values, no separate License CR) | Implemented |
 | 6 | `eks-cluster-cneinstall` — CNEInstance CR + cloud-network-mapping + BNKGateway CR + AWS IRSA | Implemented |
-| 7 | `eks-cluster-license` — apply the BNK License CR | Not yet implemented |
 
-Current revision: `version: 0.1.0`, `maturity: beta`. Stays beta until both blueprints (`existing` and `create`) have been validated end-to-end against a live AWS account — then both move to `1.0.0`.
+Current revision: `version: 0.1.0`, `maturity: beta`. End-to-end complete. Stays beta until both blueprints (`existing` and `create`) have been validated against a live AWS account — then both move to `1.0.0`.
+
+> **Why no separate license step:** the BNK license JWT is part of FLO's Helm `license:` block (alongside the RS512 public key, x5c chain, and Teem URLs). Activation is verified inside FLO's CWC pod: `kubectl logs f5-spk-cwc-... | grep "Verification Complete"`. This matches the F5 multi-node BNK on AWS/EKS install guide and the IBM ROKS reference — no separate `License` CRD exists.
 
 ## Why two blueprints
 

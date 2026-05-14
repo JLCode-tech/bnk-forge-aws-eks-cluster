@@ -10,11 +10,12 @@ Adopt an existing AWS EKS cluster into BNK Forge and lay down the shared BNK k8s
 | 2 | `eks-cluster-install-bnk-prereqs` — namespaces, FAR pull secrets, manifest | Implemented (vendored from `bnk-forge-catalog-shared`) |
 | 3 | `eks-cluster-install-cert-manager` — install Jetstack cert-manager | Implemented (vendored) |
 | 4 | `eks-cluster-install-cert-issuer` — BNK CA + ClusterIssuer | Implemented (vendored) |
-| 5 | `eks-cluster-install-flo` — install F5 Lifecycle Operator via Helm (AWS-tuned values) | Implemented |
+| 5 | `eks-cluster-install-flo` — install F5 Lifecycle Operator via Helm (AWS-tuned values); license activation happens here (JWT is part of FLO's Helm values, no separate License CR) | Implemented |
 | 6 | `eks-cluster-cneinstall` — CNEInstance CR + cloud-network-mapping + BNKGateway CR + AWS IRSA | Implemented |
-| 7 | `eks-cluster-license` — apply the BNK License CR | Not yet implemented |
 
-Current revision: `version: 0.4.0`, `maturity: preview`. The License module is the last remaining step — once that lands this blueprint will deploy BNK end-to-end onto an existing EKS cluster.
+Current revision: `version: 0.5.0`, `maturity: beta`. End-to-end complete. Moves to `1.0.0` after both blueprints (`existing` and `create`) have been validated against a live AWS account.
+
+> **Why no separate license step:** the BNK license JWT is part of FLO's Helm `license:` block (alongside the RS512 public key, x5c chain, and Teem URLs). Activation is verified inside FLO's CWC pod: `kubectl logs f5-spk-cwc-... | grep "Verification Complete"`. This matches the F5 multi-node BNK on AWS/EKS install guide and the IBM ROKS reference — no separate `License` CRD exists.
 
 ## Inputs (current revision)
 
@@ -84,6 +85,13 @@ After apply:
 - AWS IRSA is wired for the CNE controller: IAM role with EC2 VIP permissions, SA annotated, controller restarted.
 - (When configured) cloud-network-mapping ConfigMap and BNKGateway CR (`kind: F5BnkGateway`) are applied so the CNE controller can compute multi-AZ TMM placement and Gateway/HTTPRoute translation works.
 
-## What's still required to deploy BNK end-to-end
+## Verifying BNK is up
 
-Until the License module ships in this repo, run that step manually after this blueprint applies. Or wait for the next PR.
+After apply succeeds, confirm license activation completed inside the CWC pod:
+
+```bash
+kubectl logs -n <operator_namespace> -l app.kubernetes.io/name=f5-spk-cwc \
+  -c f5-spk-cwc | grep -i "Verification Complete"
+```
+
+A matching log line means FLO accepted the JWT, contacted the Teem URLs, and BNK is fully licensed. If you don't see it, double-check the JWT in your project secret hasn't expired.
