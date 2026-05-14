@@ -18,6 +18,26 @@ output "nad_namespace" {
   value       = var.nad_namespace
 }
 
+output "nad_external_static_address" {
+  description = "Resolved static-address placeholder used in the external NAD's ipam stanza. Either the explicit override, the cidrhost+1 of the first discovered tmm-external subnet, or the fallback."
+  value       = local.nad_external_static_address
+}
+
+output "nad_internal_static_address" {
+  description = "Resolved static-address placeholder used in the internal NAD's ipam stanza. Same resolution order as external."
+  value       = local.nad_internal_static_address
+}
+
+output "discovered_tmm_external_cidrs" {
+  description = "TMM-external subnet CIDRs the module discovered via the f5-bnk-role=tmm-external tag. Sorted. Empty list = no subnets tagged in this VPC."
+  value       = local.tmm_external_cidrs
+}
+
+output "discovered_tmm_internal_cidrs" {
+  description = "TMM-internal subnet CIDRs the module discovered via the f5-bnk-role=tmm-internal tag. Sorted."
+  value       = local.tmm_internal_cidrs
+}
+
 output "nads_applied" {
   description = "Gate output — true once both NADs have been applied. Downstream modules (cneinstall) should depend on this so they only render the CNEInstance CR after the NADs exist."
   value       = true

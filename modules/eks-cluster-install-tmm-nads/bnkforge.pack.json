@@ -3,7 +3,7 @@
   "module": {
     "name": "aws_eks_cluster_install_tmm_nads",
     "path": "modules/eks-cluster-install-tmm-nads",
-    "version": "0.1.0-alpha",
+    "version": "0.2.0-alpha",
     "category": "bnk",
     "description": "Install Multus CNI and the two NetworkAttachmentDefinitions (ens7-ipvlan-l2 + ens8-ipvlan-l2) TMM needs for its data-plane interfaces. AWS EKS does not ship Multus by default; without this module a -with-hp-nodes deploy would need the F5 install guide's NAD YAMLs applied manually. Replaces that manual prerequisite. Designed to run after eks-cluster-hp-nodes and before eks-cluster-cneinstall in the variant blueprints.",
     "provider": "aws",
@@ -46,8 +46,45 @@
     ]
   },
   "inputs": {
-    "required": [],
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "string",
+        "description": "AWS access key ID. Resolved by Forge's credential template at deploy time (any auth method).",
+        "source": "user",
+        "sensitive": true
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "string",
+        "description": "AWS secret access key.",
+        "source": "user",
+        "sensitive": true
+      },
+      {
+        "name": "aws_region",
+        "type": "string",
+        "description": "AWS region.",
+        "source": "user"
+      },
+      {
+        "name": "vpc_id",
+        "type": "string",
+        "description": "Cluster VPC ID. Scopes the f5-bnk-role tag-discovery used to derive each NAD's static-address placeholder. Auto-wired from cluster-register / cluster-create.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "vpc_id"
+      }
+    ],
     "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "string",
+        "description": "AWS session token. Populated for STS / SSO / assumed-role; empty for static keys.",
+        "source": "user",
+        "sensitive": true,
+        "default": ""
+      },
       {
         "name": "install_multus",
         "type": "boolean",
@@ -119,9 +156,23 @@
         "default": "l2"
       },
       {
-        "name": "nad_static_address",
+        "name": "nad_external_static_address",
         "type": "string",
-        "description": "Placeholder static address in the NAD ipam stanza. F5 IPAM operator manages real allocation; this value just satisfies the CNI schema.",
+        "description": "Explicit override for the external NAD's static-address placeholder. Empty = derive from the first f5-bnk-role=tmm-external subnet discovered in vpc_id (cidrhost(cidr, 1) + matching prefix).",
+        "source": "user",
+        "default": ""
+      },
+      {
+        "name": "nad_internal_static_address",
+        "type": "string",
+        "description": "Explicit override for the internal NAD's static-address placeholder. Empty = derive from the first f5-bnk-role=tmm-internal subnet discovered in vpc_id.",
+        "source": "user",
+        "default": ""
+      },
+      {
+        "name": "nad_static_address_fallback",
+        "type": "string",
+        "description": "Used only when discovery returns no tagged subnets AND no per-NAD override is set. Default 10.10.1.1/24 matches the F5 install guide's reference value.",
         "source": "user",
         "default": "10.10.1.1/24"
       }
@@ -150,6 +201,26 @@
         "description": "Namespace where NADs were created."
       },
       {
+        "name": "nad_external_static_address",
+        "type": "string",
+        "description": "Resolved static-address placeholder used in the external NAD's ipam stanza (override, derived, or fallback)."
+      },
+      {
+        "name": "nad_internal_static_address",
+        "type": "string",
+        "description": "Resolved static-address placeholder used in the internal NAD's ipam stanza."
+      },
+      {
+        "name": "discovered_tmm_external_cidrs",
+        "type": "list(string)",
+        "description": "TMM-external subnet CIDRs the module discovered via the f5-bnk-role=tmm-external tag in vpc_id."
+      },
+      {
+        "name": "discovered_tmm_internal_cidrs",
+        "type": "list(string)",
+        "description": "TMM-internal subnet CIDRs the module discovered via the f5-bnk-role=tmm-internal tag in vpc_id."
+      },
+      {
         "name": "nads_applied",
         "type": "boolean",
         "description": "Gate output — true once both NADs are applied. cneinstall depends on this before rendering the CNEInstance CR."
@@ -157,7 +228,24 @@
     ]
   },
   "credentials": {
-    "required": [],
-    "optional": []
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "cloud",
+        "description": "AWS credential template (any auth method)."
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "cloud",
+        "description": "AWS credential template (any auth method)."
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "cloud",
+        "description": "AWS credential template (STS / SSO / assumed-role only)."
+      }
+    ]
   }
 }

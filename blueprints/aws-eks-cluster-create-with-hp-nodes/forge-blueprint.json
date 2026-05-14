@@ -317,11 +317,16 @@
     {
       "id": "tmm-nads",
       "name": "TMM NADs (Multus + ens7/ens8 NetworkAttachmentDefinitions)",
-      "description": "Install Multus CNI and the ens7-ipvlan-l2 + ens8-ipvlan-l2 NetworkAttachmentDefinitions TMM needs for its dual data-plane interfaces.",
+      "description": "Install Multus CNI and the ens7-ipvlan-l2 + ens8-ipvlan-l2 NetworkAttachmentDefinitions TMM needs for its dual data-plane interfaces. Each NAD's static-address placeholder is derived from the matching f5-bnk-role-tagged subnet via apply-time discovery — no hardcoded 10.10.1.1/24.",
       "module": "modules/eks-cluster-install-tmm-nads",
-      "version": "0.1.0-alpha",
+      "version": "0.2.0-alpha",
       "depends_on": ["hp-nodes"],
-      "inputs": {}
+      "inputs": {
+        "aws_access_key_id": "${aws_access_key_id}",
+        "aws_secret_access_key": "${aws_secret_access_key}",
+        "aws_session_token": "${aws_session_token}",
+        "aws_region": "${aws_region}"
+      }
     },
     {
       "id": "bnk-prereqs",
