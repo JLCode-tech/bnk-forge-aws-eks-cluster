@@ -69,6 +69,11 @@ output "availability_zone_count" {
   value       = length(local.subnets_by_az)
 }
 
+output "availability_zones" {
+  description = "AZ names the cluster spans, derived from the cluster's subnet config. Sorted for stability. Consumed by hp-nodes to spread the HP managed node group across the same AZs as the cluster."
+  value       = sort(keys(local.subnets_by_az))
+}
+
 output "tmm_external_subnets_by_az" {
   description = <<-EOT
     AWS subnets tagged 'f5-bnk-role=tmm-external' in the cluster's VPC, grouped

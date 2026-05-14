@@ -94,6 +94,11 @@ output "availability_zone_count" {
   value       = local.az_count
 }
 
+output "availability_zones" {
+  description = "AZ names the cluster spans (in cluster order). Consumed by hp-nodes to spread the HP managed node group across the same AZs."
+  value       = local.zone_names
+}
+
 output "worker_node_count" {
   description = "Total worker node count: worker_count_per_az × az_count."
   value       = var.worker_count_per_az * local.az_count

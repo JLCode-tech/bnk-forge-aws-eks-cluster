@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "aws_eks_cluster_hp_nodes",
+    "path": "modules/eks-cluster-hp-nodes",
+    "version": "0.1.0-alpha",
+    "category": "infra",
+    "description": "Add a dedicated high-performance EKS managed node group for hosting TMM data-plane pods. Creates per-AZ TMM subnets (tagged f5-bnk-role=tmm-external for auto-discovery), a node IAM role with ENI-management permissions, a launch template with IMDSv2 + EBS encryption + secondary-ENI bootstrap user-data, and the node group itself with the app=f5-tmm label. Works for both blueprints (cluster-create greenfield and cluster-register brownfield).",
+    "provider": "aws",
+    "supported_platforms": ["aws_eks"],
+    "tags": ["aws", "eks", "kubernetes", "high-performance", "tmm", "sriov", "data-plane", "infrastructure"],
+    "maturity": "alpha"
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "modules/eks-cluster-register",
+        "reason": "Provides eks_cluster_name + vpc_id + vpc_cidr + private_subnet_ids + availability_zones for an existing cluster."
+      }
+    ],
+    "optional": [
+      {
+        "module": "modules/eks-cluster-create",
+        "reason": "Alternative upstream — emits the same output shape as cluster-register, so HP-nodes works identically for greenfield deploys."
+      }
+    ]
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "string",
+        "description": "AWS access key ID. Resolved by Forge's credential template at deploy time (any auth method).",
+        "source": "user",
+        "sensitive": true
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "string",
+        "description": "AWS secret access key. Resolved by Forge's credential template at deploy time.",
+        "source": "user",
+        "sensitive": true
+      },
+      {
+        "name": "aws_region",
+        "type": "string",
+        "description": "AWS region.",
+        "source": "user"
+      },
+      {
+        "name": "eks_cluster_name",
+        "type": "string",
+        "description": "Name of the EKS cluster the HP node group attaches to.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "cluster_name"
+      },
+      {
+        "name": "vpc_id",
+        "type": "string",
+        "description": "Cluster VPC ID — where TMM subnets are created.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "vpc_id"
+      },
+      {
+        "name": "vpc_cidr",
+        "type": "string",
+        "description": "Cluster VPC primary CIDR, used for auto-carving TMM subnets when tmm_subnet_cidrs is empty.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "vpc_cidr"
+      },
+      {
+        "name": "availability_zones",
+        "type": "list(string)",
+        "description": "AZs to spread HP nodes across. Should match the cluster's AZ spread.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "availability_zones"
+      },
+      {
+        "name": "node_subnet_ids",
+        "type": "list(string)",
+        "description": "Cluster subnet IDs where the HP managed node group places its PRIMARY ENI (control-plane reach). The SECONDARY ENI lands in a TMM subnet via user-data.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "subnet_ids"
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "string",
+        "description": "AWS session token. Populated for STS / SSO / assumed-role; empty for static keys.",
+        "source": "user",
+        "sensitive": true,
+        "default": ""
+      },
+      {
+        "name": "tmm_subnet_cidrs",
+        "type": "list(string)",
+        "description": "Explicit TMM subnet CIDRs. Empty list = auto-carve from vpc_cidr.",
+        "source": "user",
+        "default": []
+      },
+      {
+        "name": "instance_type",
+        "type": "string",
+        "description": "EC2 instance type for HP nodes. Default supports SR-IOV + 100Gbps ENA.",
+        "source": "user",
+        "default": "m5n.large"
+      },
+      {
+        "name": "node_count_per_az",
+        "type": "number",
+        "description": "Desired HP nodes per AZ. 0 = skip the node group entirely (subnets still created when tag_subnets_for_tmm = true).",
+        "source": "user",
+        "default": 1
+      },
+      {
+        "name": "node_disk_size_gb",
+        "type": "number",
+        "description": "Root volume size for HP nodes.",
+        "source": "user",
+        "default": 50
+      },
+      {
+        "name": "secondary_eni_device_index",
+        "type": "number",
+        "description": "Device index for the bootstrapped secondary ENI. 2 → ens7 on AL2023, matching the F5 reference NetworkAttachmentDefinition.",
+        "source": "user",
+        "default": 2
+      },
+      {
+        "name": "additional_ips_per_eni",
+        "type": "number",
+        "description": "Additional private IPs allocated on the secondary ENI at creation. 0 = let cneinstall's IPAM manage allocation.",
+        "source": "user",
+        "default": 0
+      },
+      {
+        "name": "node_label_app",
+        "type": "string",
+        "description": "Value for the 'app' label on HP nodes; FLO matches this to schedule TMM pods.",
+        "source": "user",
+        "default": "f5-tmm"
+      },
+      {
+        "name": "tag_subnets_for_tmm",
+        "type": "boolean",
+        "description": "Tag TMM subnets with 'f5-bnk-role=tmm-external' so cneinstall auto-discovers them for the BNKGateway CR.",
+        "source": "user",
+        "default": true
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "tmm_subnet_ids",
+        "type": "list(string)",
+        "description": "TMM subnet IDs, AZ-ordered."
+      },
+      {
+        "name": "tmm_subnet_ids_by_az",
+        "type": "map(string)",
+        "description": "AZ → TMM subnet ID."
+      },
+      {
+        "name": "tmm_external_subnets_by_az",
+        "type": "list(object({name=string,subnets=list(object({cidr=string,subnet_id=string}))}))",
+        "description": "AZ → TMM external subnets, in cluster-register output shape. Override the cneinstall input of the same name when chaining HP-nodes ahead of cneinstall."
+      },
+      {
+        "name": "hp_node_group_arn",
+        "type": "string",
+        "description": "ARN of the HP managed node group. Empty when node_count_per_az = 0."
+      },
+      {
+        "name": "hp_node_group_name",
+        "type": "string",
+        "description": "Name of the HP managed node group."
+      },
+      {
+        "name": "hp_node_role_arn",
+        "type": "string",
+        "description": "IAM role ARN attached to HP nodes."
+      },
+      {
+        "name": "hp_node_count",
+        "type": "number",
+        "description": "Total HP nodes provisioned."
+      }
+    ]
+  },
+  "credentials": {
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "cloud",
+        "description": "AWS credential template (any auth method)."
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "cloud",
+        "description": "AWS credential template (any auth method)."
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "cloud",
+        "description": "AWS credential template (STS / SSO / assumed-role only)."
+      }
+    ]
+  }
+}
