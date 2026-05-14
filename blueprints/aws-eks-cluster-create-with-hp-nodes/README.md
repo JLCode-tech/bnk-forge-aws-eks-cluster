@@ -8,11 +8,12 @@ Provision a brand-new AWS EKS cluster end-to-end **and** a dedicated high-perfor
 |---|---|---|
 | 1 | `eks-cluster-create` — VPC + EKS cluster + default node group via terraform-aws-modules | Implemented (beta) |
 | 2 | `eks-cluster-hp-nodes` — TMM subnets + HP managed node group + dual secondary ENIs per node | Implemented (alpha) |
-| 3 | `eks-cluster-install-bnk-prereqs` — namespaces, FAR pull secrets, manifest | Implemented (vendored) |
-| 4 | `eks-cluster-install-cert-manager` — Jetstack cert-manager | Implemented (vendored) |
-| 5 | `eks-cluster-install-cert-issuer` — BNK CA + ClusterIssuer | Implemented (vendored) |
-| 6 | `eks-cluster-install-flo` — F5 Lifecycle Operator + licence activation | Implemented |
-| 7 | `eks-cluster-cneinstall` — CNEInstance CR + cloud-network-mapping + BNKGateway CR + AWS IRSA | Implemented |
+| 3 | `eks-cluster-install-tmm-nads` — Multus CNI + ens7/ens8 NetworkAttachmentDefinitions | Implemented (alpha) |
+| 4 | `eks-cluster-install-bnk-prereqs` — namespaces, FAR pull secrets, manifest | Implemented (vendored) |
+| 5 | `eks-cluster-install-cert-manager` — Jetstack cert-manager | Implemented (vendored) |
+| 6 | `eks-cluster-install-cert-issuer` — BNK CA + ClusterIssuer | Implemented (vendored) |
+| 7 | `eks-cluster-install-flo` — F5 Lifecycle Operator + licence activation | Implemented |
+| 8 | `eks-cluster-cneinstall` — CNEInstance CR + cloud-network-mapping + BNKGateway CR + AWS IRSA | Implemented |
 
 Current revision: `version: 0.1.0`, `maturity: alpha`. Moves to `beta` after first successful live deploy; `1.0.0` once all four blueprints have been validated.
 
@@ -31,23 +32,7 @@ A fully provisioned greenfield deployment with TMM-ready data plane:
 
 ## NetworkAttachmentDefinition prerequisite
 
-`ens7-ipvlan-l2` and `ens8-ipvlan-l2` NADs must exist on the cluster before TMM pods can start. Apply manually per the F5 multi-node BNK on AWS/EKS install guide until a dedicated NAD-provisioning module ships:
-
-```yaml
-apiVersion: "k8s.cni.cncf.io/v1"
-kind: NetworkAttachmentDefinition
-metadata:
-  name: ens7-ipvlan-l2
-spec:
-  config: '{"cniVersion":"0.3.1","type":"ipvlan","master":"ens7","mode":"l2","ipam":{"type":"static"}}'
----
-apiVersion: "k8s.cni.cncf.io/v1"
-kind: NetworkAttachmentDefinition
-metadata:
-  name: ens8-ipvlan-l2
-spec:
-  config: '{"cniVersion":"0.3.1","type":"ipvlan","master":"ens8","mode":"l2","ipam":{"type":"static"}}'
-```
+Handled automatically by step 3 (`eks-cluster-install-tmm-nads`) — installs Multus CNI and creates the `ens7-ipvlan-l2` + `ens8-ipvlan-l2` NADs with the F5 reference config. No manual apply needed.
 
 ## Inputs (differs from the base blueprint)
 
@@ -71,11 +56,12 @@ And changes the default of:
 ```
 cluster-create
     └─→ hp-nodes
-            └─→ bnk-prereqs
-                    └─→ cert-manager
-                            └─→ cert-issuer
-                                    └─→ flo
-                                            └─→ cneinstall
+            └─→ tmm-nads ──────────────────────────┐
+            └─→ bnk-prereqs                        │
+                    └─→ cert-manager               │
+                            └─→ cert-issuer        │
+                                    └─→ flo        │
+                                          └─→ cneinstall  (also depends on tmm-nads)
 ```
 
 ## Estimated time + cost

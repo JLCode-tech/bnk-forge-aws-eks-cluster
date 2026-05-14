@@ -61,11 +61,6 @@
       "type": "project_secret",
       "name": "cne_pull_secret",
       "description": "Base64-encoded F5 FAR registry credentials (bare service-account JSON key OR dockerconfigjson). Bound from a stored project secret in the deploy form."
-    },
-    {
-      "type": "manual_step",
-      "name": "network_attachment_definitions",
-      "description": "ens7-ipvlan-l2 and ens8-ipvlan-l2 NetworkAttachmentDefinitions must exist on the cluster before TMM pods start. Apply manually per the F5 multi-node BNK on AWS/EKS install guide until the dedicated NAD-provisioning module ships. (Reference: https://clouddocs.f5.com/bigip-next-for-kubernetes/latest/ )"
     }
   ],
   "input_summary": [
@@ -270,12 +265,21 @@
       }
     },
     {
+      "id": "tmm-nads",
+      "name": "TMM NADs (Multus + ens7/ens8 NetworkAttachmentDefinitions)",
+      "description": "Install Multus CNI and the ens7-ipvlan-l2 + ens8-ipvlan-l2 NetworkAttachmentDefinitions TMM needs for its dual data-plane interfaces. Replaces the manual NAD-apply step the F5 install guide describes.",
+      "module": "modules/eks-cluster-install-tmm-nads",
+      "version": "0.1.0-alpha",
+      "depends_on": ["hp-nodes"],
+      "inputs": {}
+    },
+    {
       "id": "bnk-prereqs",
       "name": "BNK Prerequisites",
       "description": "Create BNK namespaces, FAR image pull secrets, and download the BNK manifest.",
       "module": "modules/eks-cluster-install-bnk-prereqs",
       "version": "1.0.0",
-      "depends_on": ["cluster-register", "hp-nodes"],
+      "depends_on": ["cluster-register", "hp-nodes", "tmm-nads"],
       "inputs": {
         "cne_pull_secret": "${cne_pull_secret}",
         "operator_namespace": "${operator_namespace}",
@@ -329,7 +333,7 @@
       "description": "Apply the CNEInstance CR with AWS production defaults, the cloud-network-mapping ConfigMap, the BNKGateway CR (kind: F5BnkGateway) for VIP IPAM (when vip_cidr is set), and wire AWS IRSA for the CNE controller (IAM role + SA annotation + rollout-restart).",
       "module": "modules/eks-cluster-cneinstall",
       "version": "1.0.0",
-      "depends_on": ["flo"],
+      "depends_on": ["flo", "tmm-nads"],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
         "aws_secret_access_key": "${aws_secret_access_key}",

@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "aws_eks_cluster_install_tmm_nads",
+    "path": "modules/eks-cluster-install-tmm-nads",
+    "version": "0.1.0-alpha",
+    "category": "bnk",
+    "description": "Install Multus CNI and the two NetworkAttachmentDefinitions (ens7-ipvlan-l2 + ens8-ipvlan-l2) TMM needs for its data-plane interfaces. AWS EKS does not ship Multus by default; without this module a -with-hp-nodes deploy would need the F5 install guide's NAD YAMLs applied manually. Replaces that manual prerequisite. Designed to run after eks-cluster-hp-nodes and before eks-cluster-cneinstall in the variant blueprints.",
+    "provider": "aws",
+    "supported_platforms": ["aws_eks"],
+    "tags": ["aws", "eks", "kubernetes", "multus", "cni", "network-attachment-definition", "tmm"],
+    "maturity": "alpha"
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "modules/eks-cluster-register",
+        "reason": "Provides the kubeconfig context for kubectl applies. Auto-wired via Forge's local.forge_kubeconfig injection."
+      }
+    ],
+    "optional": [
+      {
+        "module": "modules/eks-cluster-create",
+        "reason": "Alternative upstream — emits the same kubeconfig output."
+      },
+      {
+        "module": "modules/eks-cluster-hp-nodes",
+        "reason": "Logical predecessor — HP-nodes attaches the ens7/ens8 secondary ENIs that these NADs bind to. Wire as depends_on in the blueprint, not as a from_module input."
+      }
+    ]
+  },
+  "inputs": {
+    "required": [],
+    "optional": [
+      {
+        "name": "install_multus",
+        "type": "boolean",
+        "description": "Apply the upstream multus-daemonset manifest. Set false only if Multus is already installed on the cluster.",
+        "source": "user",
+        "default": true
+      },
+      {
+        "name": "multus_version",
+        "type": "string",
+        "description": "Multus release tag. Default tracks a tested stable release.",
+        "source": "user",
+        "default": "v4.1.0"
+      },
+      {
+        "name": "multus_manifest_url",
+        "type": "string",
+        "description": "Explicit override URL for the multus-daemonset manifest. Empty = build from multus_version.",
+        "source": "user",
+        "default": ""
+      },
+      {
+        "name": "nad_namespace",
+        "type": "string",
+        "description": "Namespace where the NADs are created. Default 'default' matches the F5 install guide.",
+        "source": "user",
+        "default": "default"
+      },
+      {
+        "name": "nad_external_name",
+        "type": "string",
+        "description": "External NAD name. Must match cneinstall's network_attachments[0].",
+        "source": "user",
+        "default": "ens7-ipvlan-l2"
+      },
+      {
+        "name": "nad_external_master",
+        "type": "string",
+        "description": "Host interface for the external NAD. Default 'ens7' matches hp-nodes external_eni_device_index=2.",
+        "source": "user",
+        "default": "ens7"
+      },
+      {
+        "name": "nad_internal_name",
+        "type": "string",
+        "description": "Internal NAD name. Must match cneinstall's network_attachments[1].",
+        "source": "user",
+        "default": "ens8-ipvlan-l2"
+      },
+      {
+        "name": "nad_internal_master",
+        "type": "string",
+        "description": "Host interface for the internal NAD. Default 'ens8' matches hp-nodes internal_eni_device_index=3.",
+        "source": "user",
+        "default": "ens8"
+      },
+      {
+        "name": "nad_cni_type",
+        "type": "string",
+        "description": "Multus CNI plug-in. F5 reference uses 'ipvlan'; on-prem may use 'host-device' or 'macvlan'.",
+        "source": "user",
+        "default": "ipvlan"
+      },
+      {
+        "name": "nad_ipvlan_mode",
+        "type": "string",
+        "description": "ipvlan mode. Only used when nad_cni_type = ipvlan.",
+        "source": "user",
+        "default": "l2"
+      },
+      {
+        "name": "nad_static_address",
+        "type": "string",
+        "description": "Placeholder static address in the NAD ipam stanza. F5 IPAM operator manages real allocation; this value just satisfies the CNI schema.",
+        "source": "user",
+        "default": "10.10.1.1/24"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "multus_installed",
+        "type": "boolean",
+        "description": "Whether Multus was installed by this module."
+      },
+      {
+        "name": "nad_external_name",
+        "type": "string",
+        "description": "Final external NAD name."
+      },
+      {
+        "name": "nad_internal_name",
+        "type": "string",
+        "description": "Final internal NAD name."
+      },
+      {
+        "name": "nad_namespace",
+        "type": "string",
+        "description": "Namespace where NADs were created."
+      },
+      {
+        "name": "nads_applied",
+        "type": "boolean",
+        "description": "Gate output — true once both NADs are applied. cneinstall depends on this before rendering the CNEInstance CR."
+      }
+    ]
+  },
+  "credentials": {
+    "required": [],
+    "optional": []
+  }
+}
