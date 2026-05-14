@@ -55,6 +55,32 @@ data "aws_eks_node_group" "each" {
   node_group_name = each.value
 }
 
+# Tag-based discovery of TMM data-plane subnets.
+#
+# Convention: customers tag the AWS subnets they want TMM data-plane VIPs
+# allocated from with `f5-bnk-role=tmm-external` (one tagged subnet per AZ
+# is the typical pattern). The cneinstall module consumes the output below
+# to auto-build the BNKGateway CR's defaultListenerNetworks with one entry
+# per AZ subnet — no manual vip_cidr required.
+#
+# An explicit `vip_cidr` set on cneinstall overrides discovery. If no
+# subnets carry the tag AND no vip_cidr is set, cneinstall skips the
+# BNKGateway CR entirely (preserves on-prem default behavior).
+data "aws_subnets" "tmm_external_tagged" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_eks_cluster.existing.vpc_config[0].vpc_id]
+  }
+  tags = {
+    "f5-bnk-role" = "tmm-external"
+  }
+}
+
+data "aws_subnet" "tmm_external" {
+  for_each = toset(data.aws_subnets.tmm_external_tagged.ids)
+  id       = each.value
+}
+
 locals {
   # Group subnets by AZ. Each AZ entry holds the list of (cidr, subnet_id)
   # pairs in that AZ. Matches the shape cneinstall's
@@ -80,6 +106,22 @@ locals {
   worker_node_count = sum([
     for ng in data.aws_eks_node_group.each : ng.scaling_config[0].desired_size
   ])
+
+  # TMM external subnets discovered by tag, grouped by AZ. Same shape as
+  # cloud_az_subnet_mappings so cneinstall can consume it uniformly.
+  tmm_external_subnets_by_az_map = {
+    for s in data.aws_subnet.tmm_external : s.availability_zone => {
+      cidr      = s.cidr_block
+      subnet_id = s.id
+    }...
+  }
+
+  tmm_external_subnets_by_az = [
+    for az, subnets in local.tmm_external_subnets_by_az_map : {
+      name    = az
+      subnets = subnets
+    }
+  ]
 
   kubeconfig = yamlencode({
     apiVersion      = "v1"

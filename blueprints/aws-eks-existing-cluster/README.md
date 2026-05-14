@@ -37,9 +37,17 @@ Current revision: `version: 0.4.0`, `maturity: preview`. The License module is t
 | `tmm_replicas` | User | No | Number of TMM replicas. Default `0` = auto: `min(cluster AZ count, worker node count)`. |
 | `watch_namespaces` | User | No | Namespaces the CNE controller watches. Default `["All"]`. |
 | `network_attachments` | User | No | NAD names attached to TMM. Default `["ens7-ipvlan-l2"]`. |
-| `vip_cidr` | User | **For Gateway-API traffic** | CIDR carved from your VPC (or a TMM external AZ subnet) for BNK Gateway VIPs (e.g. `192.168.250.0/24`). Empty = skip the BNKGateway CR; required if you want Gateway/HTTPRoute traffic to flow. |
+| `vip_cidr` | User | Optional override | Explicit CIDR for BNK Gateway VIPs (e.g. `192.168.250.0/24`). **When empty**, the module auto-builds the BNKGateway CR from any subnets in your cluster's VPC tagged `f5-bnk-role=tmm-external` (one listener network per AZ subnet). Set explicitly when VIPs live outside those subnets (e.g. TGW-routed CIDR). If neither is provided, the BNKGateway CR is skipped and Gateway/HTTPRoute traffic won't flow. |
 
-> **`cloud_az_subnet_mappings`, `availability_zone_count`, `worker_node_count`, `vpc_cidr`** are all auto-wired from `eks-cluster-register`. The register module queries the EKS cluster's own VPC + node group config and exposes them so `cneinstall` can compute sensible defaults (the tmm_replicas auto-default uses both AZ and node counts). Users don't see or set these — EKS already knows them.
+> **`cloud_az_subnet_mappings`, `availability_zone_count`, `worker_node_count`, `vpc_cidr`, `tmm_external_subnets_by_az`** are all auto-wired from `eks-cluster-register`. The register module queries the EKS cluster's own VPC + node group config and exposes them so `cneinstall` can compute sensible defaults. The `tmm_external_subnets_by_az` output is populated by a tag-based discovery — see "Tag conventions" below.
+
+## Tag conventions
+
+Tag your AWS subnets to enable auto-discovery in the cluster-register module:
+
+| Tag key | Tag value | Applied to | What it enables |
+|---|---|---|---|
+| `f5-bnk-role` | `tmm-external` | TMM data-plane AWS subnets (one per AZ typical) | cluster-register exposes these as `tmm_external_subnets_by_az`. cneinstall auto-builds the BNKGateway CR with multi-AZ listener networks from these subnets — no manual `vip_cidr` needed for the typical pattern where VIPs are allocated from TMM external subnets (clients in those subnets reach VIPs directly without BGP). |
 
 ## Cluster admin prerequisite (manual)
 

@@ -69,6 +69,22 @@ output "availability_zone_count" {
   value       = length(local.subnets_by_az)
 }
 
+output "tmm_external_subnets_by_az" {
+  description = <<-EOT
+    AWS subnets tagged 'f5-bnk-role=tmm-external' in the cluster's VPC, grouped
+    by AZ. Same shape as cloud_az_subnet_mappings. Empty list if no subnets
+    carry the tag.
+
+    cneinstall consumes this to auto-build the BNKGateway CR's
+    defaultListenerNetworks (one entry per AZ subnet) — so customers who tag
+    their TMM data-plane subnets don't have to supply vip_cidr explicitly.
+
+    To use: tag each TMM data-plane subnet in AWS with f5-bnk-role=tmm-external
+    before deploying the blueprint.
+  EOT
+  value       = local.tmm_external_subnets_by_az
+}
+
 output "subnet_ids" {
   description = "All subnet IDs attached to the EKS cluster's VPC config."
   value       = data.aws_eks_cluster.existing.vpc_config[0].subnet_ids

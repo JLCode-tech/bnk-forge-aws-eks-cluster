@@ -49,15 +49,41 @@ locals {
     : min(var.availability_zone_count, var.worker_node_count)
   )
 
-  # Derive F5BnkGateway listener networks from a single vip_cidr.
-  # Empty vip_cidr → skip the BNKGateway CR entirely (preserved-on-prem default).
-  bnk_gateway_enabled = var.vip_cidr != ""
+  # BNKGateway listener-networks resolution (see vip_cidr description for the
+  # 3-tier order):
+  #   1. explicit vip_cidr → single listener network from that CIDR
+  #   2. tag-discovered tmm_external_subnets_by_az → one listener network per
+  #      AZ subnet (start/end derived via cidrhost +1/-2 over the subnet CIDR)
+  #   3. neither → no listener networks, skip the BNKGateway CR
+  vip_cidr_set                  = var.vip_cidr != ""
+  tmm_external_subnets_present  = length(var.tmm_external_subnets_by_az) > 0
+  bnk_gateway_enabled           = local.vip_cidr_set || local.tmm_external_subnets_present
 
-  bnk_gateway_listener_networks = local.bnk_gateway_enabled ? [{
+  # Explicit override path: single entry from the user-supplied CIDR.
+  explicit_listener_networks = local.vip_cidr_set ? [{
     name          = var.vip_network_name
     start_address = cidrhost(var.vip_cidr, 1)
     end_address   = cidrhost(var.vip_cidr, -2)
   }] : []
+
+  # Auto-discovery path: one entry per AZ subnet. Each entry uses the FULL
+  # subnet CIDR (cidrhost +1 to cidrhost -2). If multiple subnets exist in
+  # the same AZ, each becomes its own listener network with a name suffix.
+  discovered_listener_networks = flatten([
+    for az_entry in var.tmm_external_subnets_by_az : [
+      for idx, subnet in az_entry.subnets : {
+        name          = length(az_entry.subnets) > 1 ? "${az_entry.name}-${idx}" : az_entry.name
+        start_address = cidrhost(subnet.cidr, 1)
+        end_address   = cidrhost(subnet.cidr, -2)
+      }
+    ]
+  ])
+
+  bnk_gateway_listener_networks = (
+    local.vip_cidr_set
+    ? local.explicit_listener_networks
+    : local.discovered_listener_networks
+  )
 
   cneinstance_manifest = templatefile("${path.module}/manifests/cneinstance.yaml.tftpl", {
     instance_name       = var.instance_name

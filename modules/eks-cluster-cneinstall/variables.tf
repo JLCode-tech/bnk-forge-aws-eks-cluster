@@ -205,21 +205,51 @@ variable "cloud_az_subnet_mappings" {
 
 variable "vip_cidr" {
   description = <<-EOT
-    CIDR block from which BNK Gateway VIPs are allocated. The module computes
-    the BNKGateway CR's defaultListenerNetworks entry from this:
-      start_address = cidrhost(vip_cidr, 1)     # first usable
-      end_address   = cidrhost(vip_cidr, -2)    # last usable (skip broadcast)
+    CIDR block for BNK Gateway VIP allocation — explicit override.
 
-    Empty string = skip the BNKGateway CR entirely. Without the BNKGateway
-    CR, the CNE controller silently ignores all Gateway/HTTPRoute CRs on
-    AWS/EKS — set this for any Gateway-API workload.
+    Resolution order for the BNKGateway CR's defaultListenerNetworks:
+      1. If `vip_cidr` is non-empty → single listener network derived from this CIDR
+         (start_address = cidrhost(vip_cidr, 1), end_address = cidrhost(vip_cidr, -2)).
+         Wins over auto-discovery; use when VIPs live somewhere other than the
+         TMM external AZ subnets (e.g. a TGW-routed external CIDR).
+      2. Else if cluster-register's `tmm_external_subnets_by_az` is non-empty
+         (customer tagged AWS subnets with `f5-bnk-role=tmm-external`) → multi-AZ
+         listener networks auto-derived, one per AZ subnet.
+      3. Else → the BNKGateway CR is skipped (preserves on-prem default; the CNE
+         controller will then silently ignore Gateway/HTTPRoute CRs).
 
-    Pick a CIDR carved from the cluster's VPC CIDR (or the TMM external AZ
-    subnet CIDR — clients in that subnet reach VIPs directly without BGP).
-    For a VPC of 192.168.0.0/16, a common pattern is to reserve 192.168.250.0/24.
+    Pick a CIDR carved from the cluster VPC or from a TMM external AZ subnet
+    (clients in that subnet reach VIPs directly without BGP). For a VPC of
+    192.168.0.0/16, a common explicit pattern is 192.168.250.0/24.
   EOT
   type        = string
   default     = ""
+}
+
+variable "tmm_external_subnets_by_az" {
+  description = <<-EOT
+    AZ → TMM external subnets list discovered by cluster-register via the
+    AWS subnet tag `f5-bnk-role=tmm-external`. Same shape as
+    cloud_az_subnet_mappings: [{name=<az>, subnets=[{cidr, subnet_id}, ...]}, ...].
+
+    When `vip_cidr` is empty and this list is non-empty, cneinstall builds the
+    BNKGateway CR's defaultListenerNetworks with one entry per AZ subnet —
+    customers who tag their data-plane subnets in AWS don't need to supply
+    vip_cidr.
+
+    Note: the listener network covers the full subnet CIDR by default
+    (cidrhost +1 to cidrhost -2). If your TMM selfip IPs are inside that
+    range (per the F5SPKVlan CR you'll apply later), set vip_cidr explicitly
+    to a non-overlapping CIDR instead.
+  EOT
+  type = list(object({
+    name = string
+    subnets = list(object({
+      cidr      = string
+      subnet_id = string
+    }))
+  }))
+  default = []
 }
 
 variable "bnk_gateway_name" {

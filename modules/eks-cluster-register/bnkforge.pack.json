@@ -141,6 +141,11 @@
         "name": "availability_zone_count",
         "type": "number",
         "description": "Number of distinct AZs the cluster spans."
+      },
+      {
+        "name": "tmm_external_subnets_by_az",
+        "type": "list(object({name=string,subnets=list(object({cidr=string,subnet_id=string}))}))",
+        "description": "AWS subnets tagged 'f5-bnk-role=tmm-external' in the cluster's VPC, grouped by AZ. cneinstall consumes this to auto-build the BNKGateway CR's defaultListenerNetworks. Empty list = no subnets are tagged; the user must supply vip_cidr explicitly to enable Gateway-API translation."
       }
     ]
   },

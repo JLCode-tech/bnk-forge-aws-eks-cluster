@@ -241,9 +241,18 @@
       {
         "name": "vip_cidr",
         "type": "string",
-        "description": "CIDR for BNK Gateway VIP allocation. Module derives the BNKGateway CR's start_address (cidrhost +1) and end_address (cidrhost -2) from this. Empty = skip the CR (the controller will then ignore Gateway/HTTPRoute CRs). Pick a CIDR carved from the cluster VPC or from a TMM external AZ subnet; e.g. for a 192.168.0.0/16 VPC, '192.168.250.0/24' is a typical choice.",
+        "description": "Explicit CIDR for BNK Gateway VIP allocation. Resolution: (1) if set, builds a single listener-network from this CIDR (overrides discovery); (2) else if cluster-register tag-discovered tmm_external_subnets_by_az is non-empty, auto-builds multi-AZ listener networks; (3) else skips the BNKGateway CR.",
         "default": "",
         "source": "user"
+      },
+      {
+        "name": "tmm_external_subnets_by_az",
+        "type": "list(object({name=string,subnets=list(object({cidr=string,subnet_id=string}))}))",
+        "description": "TMM external subnets per AZ, discovered by cluster-register via the AWS subnet tag 'f5-bnk-role=tmm-external'. Auto-wired; user shouldn't set this directly. Customers tag their TMM data-plane subnets in AWS, then the cneinstall module auto-builds the BNKGateway CR from those.",
+        "default": [],
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "tmm_external_subnets_by_az"
       },
       {
         "name": "bnk_gateway_name",
