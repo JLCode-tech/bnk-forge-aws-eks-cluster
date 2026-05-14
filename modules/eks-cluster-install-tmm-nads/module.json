@@ -2,7 +2,7 @@
   "module": {
     "name": "EKS Cluster Install TMM NADs",
     "path": "modules/eks-cluster-install-tmm-nads",
-    "version": "0.1.0-alpha",
+    "version": "0.2.0-alpha",
     "layer": "application",
     "category": "bnk",
     "description": "Install Multus CNI + two NetworkAttachmentDefinitions (ens7-ipvlan-l2 external, ens8-ipvlan-l2 internal) so TMM's data-plane secondary interfaces work on AWS EKS. Replaces the manual NAD-apply step the -with-hp-nodes blueprints previously required as a prerequisite.",

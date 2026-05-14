@@ -1,10 +1,41 @@
 # =============================================================================
+# AWS credentials (Forge-resolved at deploy time; any auth method)
+# =============================================================================
+# Needed for the data.aws_subnets discovery that derives each NAD's static
+# address from the matching f5-bnk-role-tagged subnet, rather than hardcoding
+# 10.10.1.1/24. Mirrors the cneinstall module's pattern.
+
+variable "aws_access_key_id" {
+  type      = string
+  sensitive = true
+}
+
+variable "aws_secret_access_key" {
+  type      = string
+  sensitive = true
+}
+
+variable "aws_session_token" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "aws_region" {
+  type = string
+}
+
+variable "vpc_id" {
+  description = "EKS cluster VPC ID. Used to scope the tag-discovery query for the TMM-external and TMM-internal subnets. Auto-wired from cluster-register / cluster-create."
+  type        = string
+}
+
+# =============================================================================
 # Forge-injected kubeconfig
 # =============================================================================
 # local.forge_kubeconfig is injected at deploy time via a generated
 # bnk_forge_providers.tf. Falls back to forge_kubeconfig_content for
 # unit / local testing.
-# =============================================================================
 
 variable "forge_kubeconfig_content" {
   description = "Plain-text kubeconfig used for kubectl applies. Forge overrides this at deploy time with a local.forge_kubeconfig reference; the variable default is the local-test fallback. Sensitive."
@@ -38,10 +69,6 @@ variable "multus_manifest_url" {
 # =============================================================================
 # NetworkAttachmentDefinitions (external + internal)
 # =============================================================================
-# Match the F5 multi-node BNK on AWS/EKS install guide:
-#   - ens7-ipvlan-l2 → external data plane (master ens7, IPVLAN L2)
-#   - ens8-ipvlan-l2 → internal data plane (master ens8, IPVLAN L2)
-# Names must match the cneinstall blueprint input `network_attachments`.
 
 variable "nad_namespace" {
   description = "Namespace where the NADs are created. F5 install guide uses 'default'; CNEInstance also lives in 'default' by convention, so the NetworkAttachmentDefinition lookup is unambiguous."
@@ -85,8 +112,34 @@ variable "nad_ipvlan_mode" {
   default     = "l2"
 }
 
-variable "nad_static_address" {
-  description = "Placeholder static IP set in the NAD ipam block. TMM doesn't actually use this for traffic — IPAM operator manages real allocation — but Multus + CNI plug-ins require a valid IPAM stanza. F5 reference uses 10.10.1.1/24. Leave default unless your cluster has a conflict."
+# =============================================================================
+# NAD static-address overrides
+# =============================================================================
+# The CNI 'static' IPAM type requires at least one address per NAD. TMM
+# doesn't actually use this for traffic — the F5 IPAM operator manages real
+# allocation — but the schema needs *something*. By default we DERIVE the
+# placeholder from the first f5-bnk-role-tagged subnet discovered in the
+# cluster VPC, so the NAD is internally consistent with the network the ENI
+# actually lives on.
+#
+# Set these explicitly only to override the derivation (or to use a custom
+# address when discovery returns nothing — see the hardcoded fallback at the
+# bottom of main.tf locals).
+
+variable "nad_external_static_address" {
+  description = "Override for the external NAD's static IPAM placeholder address (CIDR format, e.g. '10.10.1.1/24'). Empty = derive from the first discovered f5-bnk-role=tmm-external subnet."
+  type        = string
+  default     = ""
+}
+
+variable "nad_internal_static_address" {
+  description = "Override for the internal NAD's static IPAM placeholder address. Empty = derive from the first discovered f5-bnk-role=tmm-internal subnet."
+  type        = string
+  default     = ""
+}
+
+variable "nad_static_address_fallback" {
+  description = "Address used when discovery returns no tagged subnets AND no override is set. Default 10.10.1.1/24 matches the F5 install guide's reference value."
   type        = string
   default     = "10.10.1.1/24"
 }
