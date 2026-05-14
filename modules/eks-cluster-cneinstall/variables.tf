@@ -46,6 +46,11 @@ variable "eks_cluster_name" {
   type        = string
 }
 
+variable "vpc_id" {
+  description = "EKS cluster VPC ID. cneinstall rediscovers f5-bnk-role=tmm-external subnets at apply time scoped to this VPC, so newly-created HP-nodes TMM subnets land in the BNKGateway CR even though they didn't exist when the upstream provisioning module ran its own discovery."
+  type        = string
+}
+
 variable "cluster_oidc_issuer_url" {
   description = "OIDC issuer URL of the EKS cluster. Used for the IRSA trust policy."
   type        = string

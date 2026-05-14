@@ -99,6 +99,14 @@
         "from_output": "cluster_name"
       },
       {
+        "name": "vpc_id",
+        "type": "string",
+        "description": "EKS cluster VPC ID. cneinstall rediscovers f5-bnk-role=tmm-external subnets at apply time scoped to this VPC, so any HP-nodes TMM subnets created earlier in the same blueprint land in the BNKGateway CR.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "vpc_id"
+      },
+      {
         "name": "cluster_oidc_issuer_url",
         "type": "string",
         "description": "OIDC issuer URL of the EKS cluster.",

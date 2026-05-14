@@ -27,6 +27,34 @@ provider "aws" {
 }
 
 # =============================================================================
+# TMM-external subnet discovery (at cneinstall apply time)
+# =============================================================================
+# Rediscover f5-bnk-role=tmm-external subnets in the cluster VPC at THIS
+# module's plan/apply time, rather than relying on a snapshot pre-computed by
+# cluster-register/cluster-create. This matters when hp-nodes runs between the
+# provisioning module and cneinstall — the new HP TMM subnets only exist after
+# hp-nodes applies, so the upstream module's snapshot can't include them.
+#
+# When no subnets are tagged, both data sources return empty; we fall back to
+# the upstream input (var.tmm_external_subnets_by_az) which retains the
+# existing behaviour for users who pre-computed the list outside this module.
+
+data "aws_subnets" "tmm_external_discovered" {
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
+  tags = {
+    "f5-bnk-role" = "tmm-external"
+  }
+}
+
+data "aws_subnet" "tmm_external_discovered" {
+  for_each = toset(data.aws_subnets.tmm_external_discovered.ids)
+  id       = each.value
+}
+
+# =============================================================================
 # Forge-injected kubeconfig (used by kubectl in local-exec provisioners)
 # =============================================================================
 
@@ -55,9 +83,31 @@ locals {
   #   2. tag-discovered tmm_external_subnets_by_az → one listener network per
   #      AZ subnet (start/end derived via cidrhost +1/-2 over the subnet CIDR)
   #   3. neither → no listener networks, skip the BNKGateway CR
-  vip_cidr_set                  = var.vip_cidr != ""
-  tmm_external_subnets_present  = length(var.tmm_external_subnets_by_az) > 0
-  bnk_gateway_enabled           = local.vip_cidr_set || local.tmm_external_subnets_present
+  # Group rediscovered subnets by AZ in the same shape as the input. Then
+  # prefer the just-discovered list (covers hp-nodes-created subnets that the
+  # upstream snapshot can't see) and fall back to the input value when nothing
+  # is currently tagged.
+  discovered_tmm_external_by_az_map = {
+    for s in data.aws_subnet.tmm_external_discovered :
+    s.availability_zone => { cidr = s.cidr_block, subnet_id = s.id }...
+  }
+
+  discovered_tmm_external_subnets_by_az = [
+    for az, subnets in local.discovered_tmm_external_by_az_map : {
+      name    = az
+      subnets = subnets
+    }
+  ]
+
+  effective_tmm_external_subnets_by_az = (
+    length(local.discovered_tmm_external_subnets_by_az) > 0
+    ? local.discovered_tmm_external_subnets_by_az
+    : var.tmm_external_subnets_by_az
+  )
+
+  vip_cidr_set                 = var.vip_cidr != ""
+  tmm_external_subnets_present = length(local.effective_tmm_external_subnets_by_az) > 0
+  bnk_gateway_enabled          = local.vip_cidr_set || local.tmm_external_subnets_present
 
   # Explicit override path: single entry from the user-supplied CIDR.
   explicit_listener_networks = local.vip_cidr_set ? [{
@@ -70,7 +120,7 @@ locals {
   # subnet CIDR (cidrhost +1 to cidrhost -2). If multiple subnets exist in
   # the same AZ, each becomes its own listener network with a name suffix.
   discovered_listener_networks = flatten([
-    for az_entry in var.tmm_external_subnets_by_az : [
+    for az_entry in local.effective_tmm_external_subnets_by_az : [
       for idx, subnet in az_entry.subnets : {
         name          = length(az_entry.subnets) > 1 ? "${az_entry.name}-${idx}" : az_entry.name
         start_address = cidrhost(subnet.cidr, 1)
