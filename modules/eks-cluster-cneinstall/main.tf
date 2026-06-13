@@ -446,3 +446,26 @@ resource "null_resource" "annotate_and_restart" {
     EOT
   }
 }
+
+# =============================================================================
+# 6. Honest readiness gate — vendored cloud-agnostic cneinstance-ready-gate
+# =============================================================================
+# Replaces the old fire-and-forget `cneinstance_ready = true` literal. The
+# CNEInstance step is self-gating: it does not report ready until the operator
+# reports F5TmmAvailable && CNEControllerAvailable (or the state fallback). The
+# IRSA wiring above is best-effort; this gate is the authority for readiness.
+# depends_on includes the IRSA dance because CNEControllerAvailable only flips
+# True after the controller has its VIP credentials.
+
+module "ready_gate" {
+  source = "../eks-cluster-cneinstance-ready-gate"
+
+  kubeconfig_file    = local_sensitive_file.kubeconfig.filename
+  instance_namespace = var.operator_namespace
+  instance_name      = var.instance_name
+
+  depends_on = [
+    null_resource.cneinstance,
+    null_resource.annotate_and_restart,
+  ]
+}

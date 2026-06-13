@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "CNEInstance Ready Gate",
+    "path": "modules/eks-cluster-cneinstance-ready-gate",
+    "version": "0.1.0-alpha",
+    "category": "bnk",
+    "description": "Cloud-agnostic readiness gate for a BNK CNEInstance. Polls the operator-written .status (F5TmmAvailable && CNEControllerAvailable, with a status.state Ready/Running fallback) after the CR is applied, dumps pod diagnostics and fails closed on timeout. Replaces fire-and-forget cneinstance_ready=true literals. Per-cloud catalogs vendor this and call it after their cneinstall step."
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "dependencies": {
+    "required": [],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "Namespace where the CNEInstance CR lives (forge EKS: operator_namespace, default f5-operator).",
+        "source": "user"
+      },
+      {
+        "name": "instance_name",
+        "type": "string",
+        "description": "Name of the CNEInstance CR to poll.",
+        "source": "user"
+      }
+    ],
+    "optional": [
+      {
+        "name": "kubeconfig_file",
+        "type": "string",
+        "description": "Path to an existing kubeconfig. Empty = materialise from forge_kubeconfig_content.",
+        "source": "user",
+        "default": ""
+      },
+      {
+        "name": "cne_crd_name",
+        "type": "string",
+        "description": "Fully-qualified CNEInstance CRD name for the CRD pre-gate.",
+        "source": "user",
+        "default": "cneinstances.k8s.f5.com"
+      },
+      {
+        "name": "condition_timeout_seconds",
+        "type": "number",
+        "description": "Max seconds to wait for the readiness conditions before failing closed.",
+        "source": "user",
+        "default": 570
+      },
+      {
+        "name": "crd_timeout_seconds",
+        "type": "number",
+        "description": "Max seconds to wait for the CNEInstance CRD to be registered.",
+        "source": "user",
+        "default": 300
+      },
+      {
+        "name": "poll_interval_seconds",
+        "type": "number",
+        "description": "Seconds between condition-gate poll iterations.",
+        "source": "user",
+        "default": 30
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "cneinstance_ready",
+        "type": "string",
+        "description": "Gate output — the readiness null_resource id, produced only after the operator reported the instance functional. Never a literal true."
+      },
+      {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "Namespace of the gated CNEInstance."
+      },
+      {
+        "name": "instance_name",
+        "type": "string",
+        "description": "Name of the gated CNEInstance."
+      }
+    ]
+  },
+  "credentials": {
+    "required": [],
+    "optional": []
+  }
+}

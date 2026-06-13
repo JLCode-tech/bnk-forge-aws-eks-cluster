@@ -12,9 +12,11 @@ Some modules in this repository are **vendored copies** of upstream modules from
 
 | Local module path | Upstream source |
 | --- | --- |
-| `modules/eks-cluster-install-bnk-prereqs` | `k8s/bnk-prerequisites` |
-| `modules/eks-cluster-install-cert-manager` | `k8s/cert-manager` |
-| `modules/eks-cluster-install-cert-issuer` | `k8s/bnk-cert-issuer` |
+| `modules/eks-cluster-install-bnk-prereqs` | `modules/bnk-prerequisites` |
+| `modules/eks-cluster-install-cert-manager` | `modules/cert-manager` |
+| `modules/eks-cluster-install-cert-issuer` | `modules/bnk-cert-issuer` |
+| `modules/eks-cluster-install-multus` | `modules/install-multus` |
+| `modules/eks-cluster-cneinstance-ready-gate` | `modules/cneinstance-ready-gate` |
 
 The current pin is recorded in [`VENDORED.pin`](./VENDORED.pin) at the repo root.
 

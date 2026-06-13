@@ -49,10 +49,6 @@ output "effective_tmm_replicas" {
 }
 
 output "cneinstance_ready" {
-  description = "Gate output — true once the IRSA dance (annotate + rollout-restart) has finished. Downstream modules (License) should depend on this."
-  value       = true
-
-  depends_on = [
-    null_resource.annotate_and_restart,
-  ]
+  description = "Gate output — the readiness gate's null_resource id, produced ONLY after the operator reported the CNEInstance functional (F5TmmAvailable && CNEControllerAvailable, or the status.state Ready/Running fallback). NOT a literal true: if the operator never reports ready, the readiness gate dumps pod diagnostics and fails the apply. Downstream modules (License) should depend on this."
+  value       = module.ready_gate.cneinstance_ready
 }

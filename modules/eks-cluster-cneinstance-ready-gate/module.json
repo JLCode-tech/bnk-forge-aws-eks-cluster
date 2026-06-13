@@ -1,0 +1,90 @@
+{
+  "module": {
+    "name": "CNEInstance Ready Gate",
+    "path": "modules/eks-cluster-cneinstance-ready-gate",
+    "version": "0.1.0-alpha",
+    "layer": "kubernetes",
+    "category": "bnk",
+    "description": "Cloud-agnostic readiness gate for a BNK CNEInstance. Polls the operator-written .status (F5TmmAvailable && CNEControllerAvailable, with a status.state Ready/Running fallback) after the CR is applied; dumps pod diagnostics and fails closed on timeout. Ported from awsbnkctl phase25_activation_poll.go. Deliberately ignores the rollup Available condition (H1).",
+    "cloud_specific": false,
+    "supported_platforms": [
+      "any"
+    ]
+  },
+  "source": {
+    "kind": "official",
+    "channel": "release/2.2"
+  },
+  "execution": {
+    "engine": "opentofu",
+    "deploy_models": [
+      "terraform"
+    ]
+  },
+  "contract": {
+    "metadata_version": "module-metadata/v2alpha1"
+  },
+  "dependencies": {
+    "required": [],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "Namespace where the CNEInstance CR lives.",
+        "source": "user"
+      },
+      {
+        "name": "instance_name",
+        "type": "string",
+        "description": "Name of the CNEInstance CR to poll.",
+        "source": "user"
+      }
+    ],
+    "optional": [
+      {
+        "name": "cne_crd_name",
+        "type": "string",
+        "description": "Fully-qualified CNEInstance CRD name.",
+        "default": "cneinstances.k8s.f5.com",
+        "source": "user"
+      },
+      {
+        "name": "condition_timeout_seconds",
+        "type": "number",
+        "description": "Readiness-condition timeout in seconds.",
+        "default": 570,
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "cneinstance_ready",
+        "type": "string",
+        "description": "Gate output — null_resource id produced only after the operator reported the instance functional.",
+        "used_by": [
+          "bnk/license",
+          "bnk/traffic-check"
+        ],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": [
+      "local",
+      "null"
+    ],
+    "optional": []
+  },
+  "deployment": {
+    "order": 55,
+    "estimated_time": "1-10 minutes (depends on operator rollout)",
+    "requires_user_input": false,
+    "sensitive_inputs": []
+  }
+}
