@@ -86,6 +86,13 @@
         "source": "module",
         "from_module": "modules/eks-cluster-install-bnk-prereqs",
         "from_output": "manifest_version"
+      },
+      {
+        "name": "jwt_token",
+        "type": "string",
+        "description": "F5 BNK JWT licensing token — bind to the same project secret the FLO module uses. Applied to the License CR (spec.jwt) by the license-activation-gate, which then gates on activation.",
+        "source": "user",
+        "sensitive": true
       }
     ],
     "optional": [
@@ -261,9 +268,16 @@
       },
       {
         "name": "cneinstance_ready",
-        "type": "boolean",
-        "description": "Gate output — true once IRSA wiring is complete.",
-        "used_by": ["modules/eks-cluster-license"],
+        "type": "string",
+        "description": "Gate output — the readiness gate's null_resource id, produced only after the operator reported the CNEInstance functional. Not a literal true.",
+        "used_by": ["modules/eks-cluster-license-activation-gate"],
+        "sensitive": false
+      },
+      {
+        "name": "license_active",
+        "type": "string",
+        "description": "Gate output — the license-activation-gate's null_resource id, produced only after the License CR was applied and the operator reported .status.state == Active. Not a literal true.",
+        "used_by": [],
         "sensitive": false
       }
     ]
@@ -276,6 +290,6 @@
     "order": 60,
     "estimated_time": "5-10 minutes (waiting for CNE controller pod creation + rollout)",
     "requires_user_input": true,
-    "sensitive_inputs": ["aws_access_key_id", "aws_secret_access_key", "aws_session_token"]
+    "sensitive_inputs": ["aws_access_key_id", "aws_secret_access_key", "aws_session_token", "jwt_token"]
   }
 }

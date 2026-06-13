@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "License Activation Gate",
+    "path": "modules/eks-cluster-license-activation-gate",
+    "version": "0.1.0-alpha",
+    "category": "bnk",
+    "description": "Cloud-agnostic apply-then-gate for the BNK License CR. Waits for the licenses.k8s.f5net.com CRD, server-side-applies the License CR (connected mode, JWT inlined to a 0600 temp file, never logged), then polls .status.state until Active, dumps pod diagnostics and fails closed on timeout. Ported from awsbnkctl phase23_license.go + phase25_activation_poll.go. Per-cloud catalogs vendor this and call it after their cneinstance readiness gate."
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "dependencies": {
+    "required": [],
+    "optional": []
+  },
+  "inputs": {
+    "required": [
+      {
+        "name": "license_namespace",
+        "type": "string",
+        "description": "Namespace the License CR is applied into (forge EKS: operator_namespace, default f5-operator).",
+        "source": "user"
+      },
+      {
+        "name": "jwt_token",
+        "type": "string",
+        "description": "Raw F5 BNK JWT licensing token. Inlined into spec.jwt. Never logged.",
+        "source": "user",
+        "sensitive": true
+      }
+    ],
+    "optional": [
+      {
+        "name": "kubeconfig_file",
+        "type": "string",
+        "description": "Path to an existing kubeconfig. Empty = materialise from forge_kubeconfig_content.",
+        "source": "user",
+        "default": ""
+      },
+      {
+        "name": "license_name",
+        "type": "string",
+        "description": "Name of the License CR to apply and poll.",
+        "source": "user",
+        "default": "bnk-license"
+      },
+      {
+        "name": "operation_mode",
+        "type": "string",
+        "description": "License operationMode. Connected only.",
+        "source": "user",
+        "default": "connected"
+      },
+      {
+        "name": "license_crd_name",
+        "type": "string",
+        "description": "Fully-qualified License CRD name for the CRD pre-gate.",
+        "source": "user",
+        "default": "licenses.k8s.f5net.com"
+      },
+      {
+        "name": "teem_cert_url",
+        "type": "string",
+        "description": "TEEM cert URL (spec.teemCertUrl).",
+        "source": "user",
+        "default": "https://product.apis.f5.com/ee/v1"
+      },
+      {
+        "name": "teem_entitlement_url",
+        "type": "string",
+        "description": "TEEM entitlement URL (spec.teemEntitlementUrl).",
+        "source": "user",
+        "default": "https://product-s.apis.f5.com/ee/v1"
+      },
+      {
+        "name": "teem_initial_config_url",
+        "type": "string",
+        "description": "TEEM initial-config URL (spec.teemInitialConfigUrl).",
+        "source": "user",
+        "default": "https://product-s.apis.f5.com/ee/v1"
+      },
+      {
+        "name": "activation_timeout_seconds",
+        "type": "number",
+        "description": "Max seconds to wait for License .status.state == Active before failing closed.",
+        "source": "user",
+        "default": 570
+      },
+      {
+        "name": "crd_timeout_seconds",
+        "type": "number",
+        "description": "Max seconds to wait for the License CRD to be registered.",
+        "source": "user",
+        "default": 300
+      },
+      {
+        "name": "poll_interval_seconds",
+        "type": "number",
+        "description": "Seconds between activation-gate poll iterations.",
+        "source": "user",
+        "default": 30
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "license_active",
+        "type": "string",
+        "description": "Gate output — the activation null_resource id, produced only after the operator reported License .status.state == Active. Never a literal true."
+      },
+      {
+        "name": "license_namespace",
+        "type": "string",
+        "description": "Namespace where the License CR was applied."
+      },
+      {
+        "name": "license_name",
+        "type": "string",
+        "description": "Name of the applied License CR."
+      }
+    ]
+  },
+  "credentials": {
+    "required": [],
+    "optional": []
+  }
+}

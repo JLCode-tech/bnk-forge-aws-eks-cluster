@@ -17,6 +17,7 @@ Some modules in this repository are **vendored copies** of upstream modules from
 | `modules/eks-cluster-install-cert-issuer` | `modules/bnk-cert-issuer` |
 | `modules/eks-cluster-install-multus` | `modules/install-multus` |
 | `modules/eks-cluster-cneinstance-ready-gate` | `modules/cneinstance-ready-gate` |
+| `modules/eks-cluster-license-activation-gate` | `modules/license-activation-gate` |
 
 The current pin is recorded in [`VENDORED.pin`](./VENDORED.pin) at the repo root.
 

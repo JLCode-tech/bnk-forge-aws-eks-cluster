@@ -469,3 +469,26 @@ module "ready_gate" {
     null_resource.annotate_and_restart,
   ]
 }
+
+# =============================================================================
+# 7. License apply-then-gate — vendored cloud-agnostic license-activation-gate
+# =============================================================================
+# Chained AFTER the readiness gate: only once the CNEInstance is functionally
+# ready does this module server-side-apply the BNK License CR (spec.jwt = the
+# same JWT FLO takes) and gate on the operator-written .status.state == "Active".
+#
+# Closes the D-017 licensing gap: today the JWT is only handed to FLO's Helm
+# values and NO License CR is ever applied in the forge EKS path, so the deploy
+# never materialises a License object nor verifies activation. This module
+# applies it and fails the apply (with pod diagnostics) unless the operator
+# reports the license Active.
+
+module "license_activation_gate" {
+  source = "../eks-cluster-license-activation-gate"
+
+  kubeconfig_file   = local_sensitive_file.kubeconfig.filename
+  license_namespace = var.operator_namespace
+  jwt_token         = var.jwt_token
+
+  depends_on = [module.ready_gate]
+}
