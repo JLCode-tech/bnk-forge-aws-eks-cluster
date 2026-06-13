@@ -2,7 +2,7 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-existing-cluster",
-    "version": "0.7.1",
+    "version": "0.8.0",
     "name": "Existing EKS + BNK 2.2",
     "description": "Install the BNK 2.2 platform onto an existing AWS EKS cluster."
   },

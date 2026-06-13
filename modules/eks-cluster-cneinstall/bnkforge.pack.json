@@ -91,6 +91,13 @@
         "source": "user"
       },
       {
+        "name": "jwt_token",
+        "type": "string",
+        "description": "F5 BNK License JWT. Bind to a project secret in the deploy form. Used to activate the CNEInstance license once FLO is up.",
+        "source": "user",
+        "sensitive": true
+      },
+      {
         "name": "eks_cluster_name",
         "type": "string",
         "description": "EKS cluster name. Used for IAM resource naming.",
