@@ -18,12 +18,18 @@ After apply succeeds, Forge auto-registers your EKS cluster in its Kubernetes in
 
 ## Blueprints
 
-Four blueprints across the **existing vs. greenfield** × **with vs. without HP nodes** matrix. Pick the one matching your starting point and TMM-throughput needs.
+Four general-purpose blueprints across the **existing vs. greenfield** × **with vs. without HP nodes** matrix. Pick the one matching your starting point and TMM-throughput needs.
 
 |   | No HP nodes — TMM on existing/default cluster nodes | With HP nodes — dedicated pool, 3-iface TMM |
 |---|---|---|
 | **Existing cluster** | [`aws-eks-existing-cluster`](./blueprints/aws-eks-existing-cluster) (`beta`) | [`aws-eks-existing-cluster-with-hp-nodes`](./blueprints/aws-eks-existing-cluster-with-hp-nodes) (`alpha`) |
 | **Greenfield cluster** | [`aws-eks-cluster-create`](./blueprints/aws-eks-cluster-create) (`beta`) | [`aws-eks-cluster-create-with-hp-nodes`](./blueprints/aws-eks-cluster-create-with-hp-nodes) (`alpha`) |
+
+**Opinionated traffic-ready blueprint (recommended starting point for BNK 2.3):**
+
+| Blueprint | Description |
+|---|---|
+| [`aws-eks-bnk23-traffic`](./blueprints/aws-eks-bnk23-traffic) (`alpha`) | One-shot greenfield EKS + BNK 2.3 with validated node sizing locked in (m6i.4xlarge × 3 workers + m5n.large HP TMM pool). Minimal required inputs: credentials, region, cluster name, license JWT. Power users may override sizing/replicas via optional inputs. |
 
 **Differences:**
 - **Existing vs greenfield** — step 1 either adopts an existing cluster (`eks-cluster-register`) or provisions a new VPC + EKS + default node group (`eks-cluster-create`). Outputs match so the rest of the chain is identical.

@@ -1,0 +1,295 @@
+{
+  "schema_version": 1,
+  "blueprint": {
+    "id": "aws-eks-bnk23-traffic",
+    "version": "0.1.0",
+    "name": "AWS EKS + BNK 2.3 Traffic-Ready (Opinionated)",
+    "description": "Opinionated, one-shot greenfield deployment: provisions a new AWS EKS cluster with validated BNK 2.3 Small node sizing (m6i.4xlarge × 3 for dSSM quorum), adds a dedicated HP TMM node pool (dual secondary ENIs), installs the full BNK 2.3 platform chain, and gates on license activation — all with sensible production defaults locked in. Power users may override sizing/replicas; the minimal path requires only credentials, region, cluster name, and license JWT."
+  },
+  "bnk_version": "2.3",
+  "category": "infra",
+  "cloud_provider": "aws",
+  "compatibility": {
+    "supported_platform_profiles": [
+      "aws_eks"
+    ],
+    "required_capabilities": []
+  },
+  "icon": "Cloud",
+  "color": "orange",
+  "estimated_time": "40-60 minutes",
+  "estimated_cost": "AWS usage-based (cluster + 3× m6i.4xlarge worker nodes + ~1× m5n.large HP node per AZ + NAT)",
+  "difficulty": "intermediate",
+  "maturity": "alpha",
+  "tags": [
+    "aws",
+    "eks",
+    "kubernetes",
+    "bnk",
+    "bnk-2.3",
+    "cluster-create",
+    "hp-nodes",
+    "tmm",
+    "traffic-ready",
+    "opinionated"
+  ],
+  "prerequisites": [
+    {
+      "type": "credential_template",
+      "name": "aws_credentials",
+      "description": "AWS credential template (any of Forge's three auth methods). Principal needs VPC + EKS + IAM create privileges."
+    },
+    {
+      "type": "project_secret",
+      "name": "cne_pull_secret",
+      "description": "F5 FAR registry credentials."
+    },
+    {
+      "type": "project_secret",
+      "name": "jwt_token",
+      "description": "F5 BNK License JWT."
+    }
+  ],
+  "inputs": {
+    "required": [
+      {
+        "name": "aws_access_key_id",
+        "type": "string",
+        "description": "Auto-filled from the AWS credential template.",
+        "sensitive": true,
+        "source": "credential_template",
+        "source_field": "aws_access_key_id",
+        "order": 10
+      },
+      {
+        "name": "aws_secret_access_key",
+        "type": "string",
+        "description": "Auto-filled from the AWS credential template.",
+        "sensitive": true,
+        "source": "credential_template",
+        "source_field": "aws_secret_access_key",
+        "order": 11
+      },
+      {
+        "name": "aws_region",
+        "type": "string",
+        "description": "AWS region to deploy into.",
+        "source": "project",
+        "source_field": "region",
+        "order": 12
+      },
+      {
+        "name": "eks_cluster_name",
+        "type": "string",
+        "description": "Name for the new EKS cluster.",
+        "order": 20
+      },
+      {
+        "name": "jwt_token",
+        "type": "string",
+        "description": "F5 BNK License JWT. Bind to the jwt_token project secret.",
+        "sensitive": true,
+        "source": "project_secret",
+        "source_field": "jwt_token",
+        "order": 21
+      }
+    ],
+    "optional": [
+      {
+        "name": "aws_session_token",
+        "type": "string",
+        "description": "Auto-filled from the AWS credential template (STS/SSO only).",
+        "default": "",
+        "sensitive": true,
+        "source": "credential_template",
+        "source_field": "aws_session_token",
+        "order": 13
+      },
+      {
+        "name": "worker_instance_type",
+        "type": "string",
+        "description": "EC2 instance type for the default (BNK dSSM) node group. Default m6i.4xlarge is the validated BNK 2.3 Small minimum (16 vCPU / 64 GB, 4+ ENIs, dSSM quorum at ×3). Change only if you have confirmed an alternative meets the BNK 2.3 resource floor.",
+        "default": "m6i.4xlarge",
+        "order": 30
+      },
+      {
+        "name": "worker_count_per_az",
+        "type": "number",
+        "description": "Default-pool nodes per AZ. Minimum 3 total for dSSM quorum (awsbnkctl enforces ≥3 desiredSize for BNK patterns). Default 1 per AZ across 3 AZs = 3 total.",
+        "default": 1,
+        "order": 31
+      },
+      {
+        "name": "hp_instance_type",
+        "type": "string",
+        "description": "EC2 instance type for HP TMM nodes (must support ≥3 ENIs: CNI + ens7 external + ens8 internal). Default m5n.large (Intel Xeon + 100Gbps ENA, 3 ENI limit). For higher TMM throughput: m5n.xlarge (4 ENIs) or c5n.xlarge.",
+        "default": "m5n.large",
+        "order": 32
+      },
+      {
+        "name": "hp_node_count_per_az",
+        "type": "number",
+        "description": "HP TMM nodes per AZ.",
+        "default": 1,
+        "order": 33
+      },
+      {
+        "name": "deployment_size",
+        "type": "string",
+        "description": "CNEInstance deployment size: Small / Medium / Large / Max. Small is validated against m6i.4xlarge × 3 with awsbnkctl's live BNK 2.3 syd-tracer cluster.",
+        "default": "Small",
+        "order": 40
+      },
+      {
+        "name": "tmm_replicas",
+        "type": "number",
+        "description": "TMM replicas. 0 = auto-derive from AZ × HP node count.",
+        "default": 0,
+        "order": 41
+      },
+      {
+        "name": "vip_cidr",
+        "type": "string",
+        "description": "CIDR for BNK Gateway VIP allocation. Empty = auto-discover from HP-nodes TMM-external subnets.",
+        "default": "",
+        "order": 42
+      }
+    ]
+  },
+  "modules": [
+    {
+      "id": "cluster-create",
+      "name": "EKS Cluster Create",
+      "module": "modules/eks-cluster-create",
+      "version": "0.1.0-beta",
+      "depends_on": [],
+      "inputs": {
+        "aws_access_key_id": "${aws_access_key_id}",
+        "aws_secret_access_key": "${aws_secret_access_key}",
+        "aws_session_token": "${aws_session_token}",
+        "aws_region": "${aws_region}",
+        "eks_cluster_name": "${eks_cluster_name}",
+        "worker_instance_type": "${worker_instance_type}",
+        "worker_count_per_az": "${worker_count_per_az}",
+        "tag_private_subnets_for_tmm": false
+      }
+    },
+    {
+      "id": "hp-nodes",
+      "name": "HP TMM Node Pool",
+      "module": "modules/eks-cluster-hp-nodes",
+      "version": "0.3.0-alpha",
+      "depends_on": [
+        "cluster-create"
+      ],
+      "inputs": {
+        "aws_access_key_id": "${aws_access_key_id}",
+        "aws_secret_access_key": "${aws_secret_access_key}",
+        "aws_session_token": "${aws_session_token}",
+        "aws_region": "${aws_region}",
+        "instance_type": "${hp_instance_type}",
+        "node_count_per_az": "${hp_node_count_per_az}"
+      }
+    },
+    {
+      "id": "install-multus",
+      "name": "Install Multus CNI",
+      "module": "modules/eks-cluster-install-multus",
+      "version": "0.2.0-alpha",
+      "depends_on": [
+        "hp-nodes"
+      ],
+      "inputs": {}
+    },
+    {
+      "id": "tmm-nads",
+      "name": "TMM NADs (ens7/ens8)",
+      "module": "modules/eks-cluster-install-tmm-nads",
+      "version": "0.3.0-alpha",
+      "depends_on": [
+        "hp-nodes",
+        "install-multus"
+      ],
+      "inputs": {
+        "aws_access_key_id": "${aws_access_key_id}",
+        "aws_secret_access_key": "${aws_secret_access_key}",
+        "aws_session_token": "${aws_session_token}",
+        "aws_region": "${aws_region}"
+      }
+    },
+    {
+      "id": "bnk-prereqs",
+      "name": "BNK Prerequisites",
+      "module": "modules/eks-cluster-install-bnk-prereqs",
+      "version": "1.0.0",
+      "depends_on": [
+        "cluster-create",
+        "hp-nodes",
+        "install-multus",
+        "tmm-nads"
+      ],
+      "inputs": {
+        "cluster_name": "${eks_cluster_name}"
+      }
+    },
+    {
+      "id": "cert-manager",
+      "name": "Cert-Manager",
+      "module": "modules/eks-cluster-install-cert-manager",
+      "version": "3.1.0",
+      "depends_on": [
+        "bnk-prereqs"
+      ],
+      "inputs": {
+        "cluster_name": "${eks_cluster_name}"
+      }
+    },
+    {
+      "id": "cert-issuer",
+      "name": "BNK Cert Issuer",
+      "module": "modules/eks-cluster-install-cert-issuer",
+      "version": "1.0.0",
+      "depends_on": [
+        "cert-manager"
+      ],
+      "inputs": {}
+    },
+    {
+      "id": "flo",
+      "name": "F5 Lifecycle Operator",
+      "module": "modules/eks-cluster-install-flo",
+      "version": "2.0.0",
+      "depends_on": [
+        "cert-issuer"
+      ],
+      "inputs": {
+        "cluster_name": "${eks_cluster_name}"
+      }
+    },
+    {
+      "id": "cneinstall",
+      "name": "CNEInstance + IRSA",
+      "module": "modules/eks-cluster-cneinstall",
+      "version": "1.1.0",
+      "depends_on": [
+        "flo",
+        "tmm-nads"
+      ],
+      "inputs": {
+        "aws_access_key_id": "${aws_access_key_id}",
+        "aws_secret_access_key": "${aws_secret_access_key}",
+        "aws_session_token": "${aws_session_token}",
+        "aws_region": "${aws_region}",
+        "eks_cluster_name": "${eks_cluster_name}",
+        "deployment_size": "${deployment_size}",
+        "tmm_replicas": "${tmm_replicas}",
+        "vip_cidr": "${vip_cidr}",
+        "network_attachments": [
+          "ens7-ipvlan-l2",
+          "ens8-ipvlan-l2"
+        ],
+        "jwt_token": "${jwt_token}"
+      }
+    }
+  ]
+}
