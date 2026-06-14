@@ -4,7 +4,7 @@
     "id": "aws-eks-bnk23-traffic",
     "version": "0.1.0",
     "name": "AWS EKS + BNK 2.3 Traffic-Ready (Opinionated)",
-    "description": "Opinionated, one-shot greenfield deployment: provisions a new AWS EKS cluster with validated BNK 2.3 Small node sizing (m6i.4xlarge × 3 for dSSM quorum), adds a dedicated HP TMM node pool (dual secondary ENIs), installs the full BNK 2.3 platform chain, and gates on license activation — all with sensible production defaults locked in. Power users may override sizing/replicas; the minimal path requires only credentials, region, cluster name, and license JWT."
+    "description": "Opinionated, one-shot greenfield deployment: provisions a new AWS EKS cluster with validated BNK 2.3 Small node sizing (m6i.4xlarge × 3 for dSSM quorum), adds a dedicated HP TMM node pool (dual secondary ENIs), installs the full BNK 2.3 platform chain, and gates on license activation — all with sensible production defaults locked in. Power users may override sizing/replicas; the minimal path requires only a cluster name — credentials and secrets are resolved from project context."
   },
   "bnk_version": "2.3",
   "category": "infra",
@@ -53,6 +53,14 @@
   "inputs": {
     "required": [
       {
+        "name": "eks_cluster_name",
+        "type": "string",
+        "description": "Name for the new EKS cluster.",
+        "order": 20
+      }
+    ],
+    "optional": [
+      {
         "name": "aws_access_key_id",
         "type": "string",
         "description": "Auto-filled from the AWS credential template.",
@@ -73,28 +81,11 @@
       {
         "name": "aws_region",
         "type": "string",
-        "description": "AWS region to deploy into.",
+        "description": "AWS region to deploy into. Auto-filled from the project region.",
         "source": "project",
         "source_field": "region",
         "order": 12
       },
-      {
-        "name": "eks_cluster_name",
-        "type": "string",
-        "description": "Name for the new EKS cluster.",
-        "order": 20
-      },
-      {
-        "name": "jwt_token",
-        "type": "string",
-        "description": "F5 BNK License JWT. Bind to the jwt_token project secret.",
-        "sensitive": true,
-        "source": "project_secret",
-        "source_field": "jwt_token",
-        "order": 21
-      }
-    ],
-    "optional": [
       {
         "name": "aws_session_token",
         "type": "string",
@@ -104,6 +95,22 @@
         "source": "credential_template",
         "source_field": "aws_session_token",
         "order": 13
+      },
+      {
+        "name": "jwt_token",
+        "type": "string",
+        "description": "F5 BNK License JWT. Resolved from the jwt_token project secret.",
+        "sensitive": true,
+        "source": "project_secret",
+        "order": 21
+      },
+      {
+        "name": "cne_pull_secret",
+        "type": "string",
+        "description": "F5 FAR registry pull credentials. Resolved from the cne_pull_secret project secret.",
+        "sensitive": true,
+        "source": "project_secret",
+        "order": 22
       },
       {
         "name": "worker_instance_type",
@@ -229,7 +236,8 @@
         "tmm-nads"
       ],
       "inputs": {
-        "cluster_name": "${eks_cluster_name}"
+        "cluster_name": "${eks_cluster_name}",
+        "cne_pull_secret": "${cne_pull_secret}"
       }
     },
     {
