@@ -42,17 +42,16 @@ UPSTREAM_PATHS=(
   "modules/cert-manager"
   "modules/bnk-cert-issuer"
   "modules/install-multus"
-  "modules/cneinstance-ready-gate"
-  "modules/license-activation-gate"
 )
 LOCAL_NAMES=(
   "eks-cluster-install-bnk-prereqs"
   "eks-cluster-install-cert-manager"
   "eks-cluster-install-cert-issuer"
   "eks-cluster-install-multus"
-  "eks-cluster-cneinstance-ready-gate"
-  "eks-cluster-license-activation-gate"
 )
+# NOTE: eks-cluster-cneinstance-ready-gate and eks-cluster-license-activation-gate
+# are cloud-specific gate modules native to THIS repo (not from catalog-shared).
+# They are wired inside eks-cluster-cneinstall as TF sub-modules. Do not vendor them.
 
 # Rewrites applied to pack.json + module.json after copy:
 #   module.path: upstream-path → modules/<local>
