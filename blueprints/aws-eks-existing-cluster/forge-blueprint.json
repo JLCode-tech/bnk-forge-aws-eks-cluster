@@ -3,10 +3,10 @@
   "blueprint": {
     "id": "aws-eks-existing-cluster",
     "version": "0.8.0",
-    "name": "Existing EKS + BNK 2.2",
-    "description": "Install the BNK 2.2 platform onto an existing AWS EKS cluster."
+    "name": "Existing EKS + BNK 2.3",
+    "description": "Install the BNK 2.3 platform onto an existing AWS EKS cluster."
   },
-  "bnk_version": "2.2",
+  "bnk_version": "2.3",
   "category": "bnk",
   "cloud_provider": "aws",
   "compatibility": {
@@ -82,6 +82,15 @@
         "type": "string",
         "description": "Name of the existing EKS cluster.",
         "order": 20
+      },
+      {
+        "name": "jwt_token",
+        "type": "string",
+        "description": "F5 BNK License JWT. Bind to the jwt_token project secret.",
+        "sensitive": true,
+        "source": "project_secret",
+        "source_field": "jwt_token",
+        "order": 21
       }
     ],
     "optional": [
@@ -194,7 +203,8 @@
         "aws_region": "${aws_region}",
         "deployment_size": "${deployment_size}",
         "tmm_replicas": "${tmm_replicas}",
-        "vip_cidr": "${vip_cidr}"
+        "vip_cidr": "${vip_cidr}",
+        "jwt_token": "${jwt_token}"
       }
     }
   ]

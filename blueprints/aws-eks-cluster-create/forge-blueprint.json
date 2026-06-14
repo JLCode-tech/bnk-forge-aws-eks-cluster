@@ -3,10 +3,10 @@
   "blueprint": {
     "id": "aws-eks-cluster-create",
     "version": "0.4.0",
-    "name": "Create EKS + BNK 2.2",
-    "description": "Provision a new AWS EKS cluster (VPC + 3 AZs + managed node group) and install the BNK 2.2 platform on it."
+    "name": "Create EKS + BNK 2.3",
+    "description": "Provision a new AWS EKS cluster (VPC + 3 AZs + managed node group) and install the BNK 2.3 platform on it."
   },
-  "bnk_version": "2.2",
+  "bnk_version": "2.3",
   "category": "infra",
   "cloud_provider": "aws",
   "compatibility": {
@@ -78,6 +78,15 @@
         "type": "string",
         "description": "Name for the new EKS cluster.",
         "order": 20
+      },
+      {
+        "name": "jwt_token",
+        "type": "string",
+        "description": "F5 BNK License JWT. Bind to the jwt_token project secret.",
+        "sensitive": true,
+        "source": "project_secret",
+        "source_field": "jwt_token",
+        "order": 21
       }
     ],
     "optional": [
@@ -207,7 +216,8 @@
         "eks_cluster_name": "${eks_cluster_name}",
         "deployment_size": "${deployment_size}",
         "tmm_replicas": "${tmm_replicas}",
-        "vip_cidr": "${vip_cidr}"
+        "vip_cidr": "${vip_cidr}",
+        "jwt_token": "${jwt_token}"
       }
     }
   ]

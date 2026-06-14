@@ -3,10 +3,10 @@
   "blueprint": {
     "id": "aws-eks-existing-cluster-with-hp-nodes",
     "version": "0.4.0",
-    "name": "Existing EKS + HP + BNK 2.2",
-    "description": "Adopt an existing AWS EKS cluster, add a dedicated HP TMM node pool (dual secondary ENIs), and install the BNK 2.2 platform."
+    "name": "Existing EKS + HP + BNK 2.3",
+    "description": "Adopt an existing AWS EKS cluster, add a dedicated HP TMM node pool (dual secondary ENIs), and install the BNK 2.3 platform."
   },
-  "bnk_version": "2.2",
+  "bnk_version": "2.3",
   "category": "bnk",
   "cloud_provider": "aws",
   "compatibility": {
@@ -83,6 +83,15 @@
         "type": "string",
         "description": "Name of the existing EKS cluster.",
         "order": 20
+      },
+      {
+        "name": "jwt_token",
+        "type": "string",
+        "description": "F5 BNK License JWT. Bind to the jwt_token project secret.",
+        "sensitive": true,
+        "source": "project_secret",
+        "source_field": "jwt_token",
+        "order": 21
       }
     ],
     "optional": [
@@ -260,7 +269,8 @@
         "network_attachments": [
           "ens7-ipvlan-l2",
           "ens8-ipvlan-l2"
-        ]
+        ],
+        "jwt_token": "${jwt_token}"
       }
     }
   ]
