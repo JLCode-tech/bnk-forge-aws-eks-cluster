@@ -103,6 +103,13 @@ attach_secondary_eni() {
     --network-interface-id "$ENI_ID" \
     --attachment "AttachmentId=$ATTACHMENT_ID,DeleteOnTermination=true"
 
+  aws ec2 modify-network-interface-attribute \
+    --region "$REGION" \
+    --network-interface-id "$ENI_ID" \
+    --no-source-dest-check
+
+  echo "[hp-nodes] disabled source/dest check on $${ROLE} eni=$ENI_ID"
+
   echo "[hp-nodes] attached $${ROLE} eni=$ENI_ID device_index=$DEVICE_INDEX attachment=$ATTACHMENT_ID (delete-on-termination=true)"
 }
 
