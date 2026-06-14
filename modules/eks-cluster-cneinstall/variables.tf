@@ -73,6 +73,16 @@ variable "utils_namespace" {
 }
 
 # =============================================================================
+# Licensing (wired to the License activation gate, chained after readiness)
+# =============================================================================
+
+variable "jwt_token" {
+  description = "F5 BNK JWT licensing token. Bind to the same project secret the FLO module uses. Passed to the license-activation-gate, which applies the License CR (spec.jwt) and gates on .status.state == Active. Never logged."
+  type        = string
+  sensitive   = true
+}
+
+# =============================================================================
 # CR-wired values (auto-wired from upstream modules)
 # =============================================================================
 

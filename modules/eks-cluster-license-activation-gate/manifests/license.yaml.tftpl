@@ -1,0 +1,15 @@
+apiVersion: k8s.f5net.com/v1
+kind: License
+metadata:
+  name: ${license_name}
+  namespace: ${license_namespace}
+  labels:
+    app.kubernetes.io/name: ${license_name}
+    app.kubernetes.io/managed-by: bnk-forge
+    app.kubernetes.io/instance: ${license_name}
+spec:
+  operationMode: ${operation_mode}
+  jwt: ${jwt_placeholder}
+  teemCertUrl: ${teem_cert_url}
+  teemEntitlementUrl: ${teem_entitlement_url}
+  teemInitialConfigUrl: ${teem_initial_config_url}

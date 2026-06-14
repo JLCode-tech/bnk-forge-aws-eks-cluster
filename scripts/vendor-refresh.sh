@@ -42,12 +42,16 @@ UPSTREAM_PATHS=(
   "modules/cert-manager"
   "modules/bnk-cert-issuer"
   "modules/install-multus"
+  "modules/cneinstance-ready-gate"
+  "modules/license-activation-gate"
 )
 LOCAL_NAMES=(
   "eks-cluster-install-bnk-prereqs"
   "eks-cluster-install-cert-manager"
   "eks-cluster-install-cert-issuer"
   "eks-cluster-install-multus"
+  "eks-cluster-cneinstance-ready-gate"
+  "eks-cluster-license-activation-gate"
 )
 
 # Rewrites applied to pack.json + module.json after copy:
