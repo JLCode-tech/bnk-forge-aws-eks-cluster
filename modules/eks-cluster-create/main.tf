@@ -64,15 +64,21 @@ locals {
   })
 
   # Subnet tags. The VPC module merges these with its own internal tags.
+  # kubernetes.io/cluster/<name>=shared is required so the AWS cloud-controller
+  # and VPC CNI can discover subnets for load-balancer provisioning and ENI
+  # allocation. Without it, managed nodes launch but cannot join as Ready because
+  # the CNI cannot allocate IPs from subnets it cannot discover.
   private_subnet_tags = merge(
     {
-      "kubernetes.io/role/internal-elb" = "1"
+      "kubernetes.io/role/internal-elb"               = "1"
+      "kubernetes.io/cluster/${var.eks_cluster_name}" = "shared"
     },
     var.tag_private_subnets_for_tmm ? { "f5-bnk-role" = "tmm-external" } : {}
   )
 
   public_subnet_tags = {
-    "kubernetes.io/role/elb" = "1"
+    "kubernetes.io/role/elb"                        = "1"
+    "kubernetes.io/cluster/${var.eks_cluster_name}" = "shared"
   }
 }
 
@@ -132,7 +138,17 @@ module "eks" {
   addons = {
     coredns    = {}
     kube-proxy = {}
-    vpc-cni    = {}
+    # vpc-cni must be installed before the compute (node group) so that nodes
+    # boot already in prefix-delegation mode. Without before_compute = true the
+    # addon reconciles AFTER nodes launch and nodes may enter NodeCreationFailure
+    # because the CNI DaemonSet is not yet configured when kubelet starts.
+    # Prefix delegation keeps the CNI on the primary ENI (device-index 0),
+    # leaving device-index 1 free and preventing the secondary-ENI asymmetric-
+    # drop that previously caused BNK licensing to hang (awsbnkctl phase08b).
+    vpc-cni = {
+      before_compute       = true
+      configuration_values = jsonencode({ env = { ENABLE_PREFIX_DELEGATION = "true", WARM_PREFIX_TARGET = "1", WARM_ENI_TARGET = "0" } })
+    }
   }
 
   eks_managed_node_groups = {
