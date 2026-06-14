@@ -4,7 +4,7 @@
     "id": "aws-eks-bnk23-traffic",
     "version": "0.1.0",
     "name": "AWS EKS + BNK 2.3 Traffic-Ready (Opinionated)",
-    "description": "Opinionated, one-shot greenfield deployment: provisions a new AWS EKS cluster with validated BNK 2.3 Small node sizing (m6i.4xlarge × 3 for dSSM quorum), adds a dedicated HP TMM node pool (dual secondary ENIs), installs the full BNK 2.3 platform chain, and gates on license activation — all with sensible production defaults locked in. Power users may override sizing/replicas; the minimal path requires only a cluster name — credentials and secrets are resolved from project context."
+    "description": "Opinionated, one-shot greenfield deployment: provisions a new AWS EKS cluster with validated BNK 2.3 Small node sizing (m6i.4xlarge \u00d7 3 for dSSM quorum), adds a dedicated HP TMM node pool (dual secondary ENIs), installs the full BNK 2.3 platform chain, and gates on license activation \u2014 all with sensible production defaults locked in. Power users may override sizing/replicas; the minimal path requires only a cluster name \u2014 credentials and secrets are resolved from project context."
   },
   "bnk_version": "2.3",
   "category": "infra",
@@ -18,7 +18,7 @@
   "icon": "Cloud",
   "color": "orange",
   "estimated_time": "40-60 minutes",
-  "estimated_cost": "AWS usage-based (cluster + 3× m6i.4xlarge worker nodes + ~1× m5n.large HP node per AZ + NAT)",
+  "estimated_cost": "AWS usage-based (cluster + 3\u00d7 m6i.4xlarge worker nodes + ~1\u00d7 m5n.large HP node per AZ + NAT)",
   "difficulty": "intermediate",
   "maturity": "alpha",
   "tags": [
@@ -115,21 +115,21 @@
       {
         "name": "worker_instance_type",
         "type": "string",
-        "description": "EC2 instance type for the default (BNK dSSM) node group. Default m6i.4xlarge is the validated BNK 2.3 Small minimum (16 vCPU / 64 GB, 4+ ENIs, dSSM quorum at ×3). Change only if you have confirmed an alternative meets the BNK 2.3 resource floor.",
+        "description": "EC2 instance type for the default (BNK dSSM) node group. Default m6i.4xlarge is the validated BNK 2.3 Small minimum (16 vCPU / 64 GB, 4+ ENIs, dSSM quorum at \u00d73). Change only if you have confirmed an alternative meets the BNK 2.3 resource floor.",
         "default": "m6i.4xlarge",
         "order": 30
       },
       {
         "name": "worker_count_per_az",
         "type": "number",
-        "description": "Default-pool nodes per AZ. Minimum 3 total for dSSM quorum (awsbnkctl enforces ≥3 desiredSize for BNK patterns). Default 1 per AZ across 3 AZs = 3 total.",
+        "description": "Default-pool nodes per AZ. Minimum 3 total for dSSM quorum (awsbnkctl enforces \u22653 desiredSize for BNK patterns). Default 1 per AZ across 3 AZs = 3 total.",
         "default": 1,
         "order": 31
       },
       {
         "name": "hp_instance_type",
         "type": "string",
-        "description": "EC2 instance type for HP TMM nodes (must support ≥3 ENIs: CNI + ens7 external + ens8 internal). Default m5n.large (Intel Xeon + 100Gbps ENA, 3 ENI limit). For higher TMM throughput: m5n.xlarge (4 ENIs) or c5n.xlarge.",
+        "description": "EC2 instance type for HP TMM nodes (must support \u22653 ENIs: CNI + ens7 external + ens8 internal). Default m5n.large (Intel Xeon + 100Gbps ENA, 3 ENI limit). For higher TMM throughput: m5n.xlarge (4 ENIs) or c5n.xlarge.",
         "default": "m5n.large",
         "order": 32
       },
@@ -143,14 +143,14 @@
       {
         "name": "deployment_size",
         "type": "string",
-        "description": "CNEInstance deployment size: Small / Medium / Large / Max. Small is validated against m6i.4xlarge × 3 with awsbnkctl's live BNK 2.3 syd-tracer cluster.",
+        "description": "CNEInstance deployment size: Small / Medium / Large / Max. Small is validated against m6i.4xlarge \u00d7 3 with awsbnkctl's live BNK 2.3 syd-tracer cluster.",
         "default": "Small",
         "order": 40
       },
       {
         "name": "tmm_replicas",
         "type": "number",
-        "description": "TMM replicas. 0 = auto-derive from AZ × HP node count.",
+        "description": "TMM replicas. 0 = auto-derive from AZ \u00d7 HP node count.",
         "default": 0,
         "order": 41
       },
@@ -178,7 +178,8 @@
         "eks_cluster_name": "${eks_cluster_name}",
         "worker_instance_type": "${worker_instance_type}",
         "worker_count_per_az": "${worker_count_per_az}",
-        "tag_private_subnets_for_tmm": false
+        "tag_private_subnets_for_tmm": false,
+        "eks_cluster_version": "1.32"
       }
     },
     {
