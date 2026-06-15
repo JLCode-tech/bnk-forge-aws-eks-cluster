@@ -162,15 +162,21 @@ variable "node_taints" {
 # names: ens7-ipvlan-l2 (external) and ens8-ipvlan-l2 (internal).
 
 variable "external_eni_device_index" {
-  description = "Device index for the TMM-external secondary ENI. Default 2 → ens7 on AL2023, matching the ens7-ipvlan-l2 NetworkAttachmentDefinition default."
+  description = "Device index for the TMM-external (client-facing) secondary ENI. Default 3 → ens8 on AL2023, matching awsbnkctl phase17 (EXTERNAL_ENI device-index 3 → ens8 → EXTERNAL_PCI 0000:00:08.0). The host-device NAD discovers the real PCI by MAC at runtime; this index fixes the deterministic ens8 placement the gold standard proves Active."
+  type        = number
+  default     = 3
+}
+
+variable "internal_eni_device_index" {
+  description = "Device index for the TMM-internal (backend-facing) secondary ENI. Default 2 → ens7 on AL2023, matching awsbnkctl phase17 (INTERNAL_ENI device-index 2 → ens7 → INTERNAL_PCI 0000:00:07.0)."
   type        = number
   default     = 2
 }
 
-variable "internal_eni_device_index" {
-  description = "Device index for the TMM-internal secondary ENI. Default 3 → ens8 on AL2023, matching the ens8-ipvlan-l2 NetworkAttachmentDefinition default."
-  type        = number
-  default     = 3
+variable "single_az_demo" {
+  description = "When true (default), pin the HP node group + TMM ext/int subnets to a SINGLE AZ (availability_zones[0]) so there is exactly ONE role=bnk TMM node. Matches awsbnkctl's single-TMM demo (phase16 labels the first role=bnk node) and makes the downstream iface-discovery + SelfIP assignment unambiguous. Set false for a per-AZ multi-TMM HA topology (not yet validated end-to-end for host-device)."
+  type        = bool
+  default     = true
 }
 
 variable "additional_ips_per_eni" {

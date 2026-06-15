@@ -172,17 +172,55 @@ locals {
     : local.discovered_listener_networks
   )
 
+  # Host-device interface names (uppercased for the PCIDEVICE_INTEL_COM_<IF> env
+  # var name). Discovered ifname/PCI come from tmm-nads; fall back to the
+  # deterministic c5n.4xlarge/AL2023 mapping if wiring is absent.
+  external_ifname = var.external_ifname != "" ? var.external_ifname : "ens8"
+  internal_ifname = var.internal_ifname != "" ? var.internal_ifname : "ens7"
+
   cneinstance_manifest = templatefile("${path.module}/manifests/cneinstance.yaml.tftpl", {
-    instance_name       = var.instance_name
-    instance_namespace  = var.instance_namespace
-    manifest_version    = var.manifest_version
-    cluster_issuer_name = var.cluster_issuer_name
-    deployment_size     = var.deployment_size
-    storage_class_name  = var.storage_class_name
-    far_secret_name     = var.far_secret_name
-    network_attachments = var.network_attachments
-    watch_namespaces    = var.watch_namespaces
-    tmm_replicas        = local.effective_tmm_replicas
+    instance_name         = var.instance_name
+    instance_namespace    = var.instance_namespace
+    manifest_version      = var.manifest_version
+    cluster_issuer_name   = var.cluster_issuer_name
+    deployment_size       = var.deployment_size
+    storage_class_name    = var.storage_class_name
+    far_secret_name       = var.far_secret_name
+    network_attachments   = var.network_attachments
+    watch_namespaces      = var.watch_namespaces
+    tmm_replicas          = local.effective_tmm_replicas
+    tmm_mtu               = var.tmm_mtu
+    tmm_cpu               = var.tmm_cpu
+    tmm_memory            = var.tmm_memory
+    tmm_hugepages         = var.tmm_hugepages
+    pal_cpu_set           = var.pal_cpu_set
+    vpc_id                = var.vpc_id
+    aws_region            = var.aws_region
+    external_ifname       = local.external_ifname
+    internal_ifname       = local.internal_ifname
+    external_ifname_upper = upper(local.external_ifname)
+    internal_ifname_upper = upper(local.internal_ifname)
+    external_pci          = var.external_pci != "" ? var.external_pci : "0000:00:08.0"
+    internal_pci          = var.internal_pci != "" ? var.internal_pci : "0000:00:07.0"
+  })
+
+  # F5SPKVlan + GatewayClass (host-device dataplane completion, awsbnkctl
+  # phase23b). Applied after the CNEInstance reconciles and FLO installs the
+  # f5-spk-vlans / gatewayclasses CRDs.
+  gatewayclass_name = "${var.eks_cluster_name}-gatewayclass"
+
+  f5spkvlan_manifest = templatefile("${path.module}/manifests/f5spkvlan.yaml.tftpl", {
+    instance_namespace = var.instance_namespace
+    external_selfip    = var.external_selfip
+    internal_selfip    = var.internal_selfip
+    selfip_prefixlen   = var.selfip_prefixlen
+    has_internal       = var.internal_selfip != ""
+  })
+
+  gatewayclass_manifest = templatefile("${path.module}/manifests/gatewayclass.yaml.tftpl", {
+    gatewayclass_name  = local.gatewayclass_name
+    eks_cluster_name   = var.eks_cluster_name
+    instance_namespace = var.instance_namespace
   })
 
   # F18: the cloud-network-mapping ConfigMap must list, per AZ, the TMM data-plane
@@ -192,6 +230,10 @@ locals {
   # ens7/ens8 ENI subnets and the TMM dataplane never programmed. Merge the
   # tag-discovered tmm-external + tmm-internal subnets (same discovery used for VIP
   # listener networks) into each AZ entry, in awsbnkctl order: mgmt, external, internal.
+  # Single-TMM demo (D-033): when tmm_az is wired (from tmm-nads), restrict the
+  # mapping to the TMM node's AZ — awsbnkctl's cloud-network-mapping is single-AZ
+  # (AZs[0]). Extra AZ entries (node-subnet-only) can make the controller look
+  # for per-AZ TMMs that don't exist. Empty tmm_az = keep all AZs (multi-TMM).
   cloud_network_az_subnet_mappings = [
     for az_entry in var.cloud_az_subnet_mappings : {
       name = az_entry.name
@@ -201,6 +243,7 @@ locals {
         lookup(local.discovered_tmm_internal_by_az_map, az_entry.name, []),
       )
     }
+    if var.tmm_az == "" || az_entry.name == var.tmm_az
   ]
 
   cloud_network_mapping_manifest = templatefile("${path.module}/manifests/cloud-network-mapping.yaml.tftpl", {
@@ -490,6 +533,74 @@ resource "null_resource" "annotate_and_restart" {
         -n ${split("/", self.triggers.sa)[0]} \
         annotate sa ${split("/", self.triggers.sa)[1]} \
         eks.amazonaws.com/role-arn- 2>/dev/null || true
+    EOT
+  }
+}
+
+# =============================================================================
+# 6. F5SPKVlan + GatewayClass — host-device dataplane completion (phase23b)
+# =============================================================================
+# Binds TMM trunks 1.1 (external) / 1.2 (internal) to ext-vlan / int-vlan and
+# announces the SelfIPs the tmm-nads module assigned to the ENIs. FLO installs
+# the f5-spk-vlans + gatewayclasses CRDs only after the CNEInstance reconciles,
+# so we wait for both CRDs before applying. Skipped when no SelfIP is wired
+# (external_selfip == "") so the module still works for non-host-device callers.
+
+resource "null_resource" "spkvlan_gatewayclass" {
+  count = var.external_selfip != "" ? 1 : 0
+
+  triggers = {
+    spkvlan_hash      = sha256(local.f5spkvlan_manifest)
+    gatewayclass_hash = sha256(local.gatewayclass_manifest)
+    kubeconfig_file   = local_sensitive_file.kubeconfig.filename
+    namespace         = var.instance_namespace
+    gwc_name          = local.gatewayclass_name
+  }
+
+  depends_on = [
+    null_resource.cneinstance,
+    null_resource.annotate_and_restart,
+  ]
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      KUBECTL="${local.kubectl}"
+      echo "=== Waiting for f5-spk-vlans + gatewayclasses CRDs (FLO installs them post-reconcile) ==="
+      wait_crd() {
+        local crd="$1" elapsed=0
+        while [ $elapsed -lt ${var.spkvlan_crd_timeout_seconds} ]; do
+          if $KUBECTL get crd "$crd" >/dev/null 2>&1; then
+            echo "CRD $crd present after $${elapsed}s"; return 0
+          fi
+          sleep 10; elapsed=$((elapsed + 10))
+        done
+        echo "ERROR: CRD $crd never appeared after ${var.spkvlan_crd_timeout_seconds}s"; return 1
+      }
+      wait_crd f5-spk-vlans.k8s.f5net.com
+      wait_crd gatewayclasses.gateway.networking.k8s.io
+
+      echo "=== Applying F5SPKVlan (ext-vlan/int-vlan) ==="
+      cat <<'SPK' | $KUBECTL apply -f -
+${local.f5spkvlan_manifest}
+SPK
+
+      echo "=== Applying GatewayClass ${local.gatewayclass_name} ==="
+      cat <<'GWC' | $KUBECTL apply -f -
+${local.gatewayclass_manifest}
+GWC
+      echo "=== host-device dataplane CRs applied ==="
+    EOT
+  }
+
+  provisioner "local-exec" {
+    when       = destroy
+    on_failure = continue
+    command    = <<-EOT
+      KC="kubectl --kubeconfig ${self.triggers.kubeconfig_file}"
+      $KC -n ${self.triggers.namespace} delete f5-spk-vlans ext-vlan int-vlan --ignore-not-found 2>/dev/null || true
+      $KC delete gatewayclass ${self.triggers.gwc_name} --ignore-not-found 2>/dev/null || true
     EOT
   }
 }

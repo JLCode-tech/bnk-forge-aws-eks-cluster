@@ -1,9 +1,9 @@
 # =============================================================================
 # AWS credentials (Forge-resolved at deploy time; any auth method)
 # =============================================================================
-# Needed for the data.aws_subnets discovery that derives each NAD's static
-# address from the matching f5-bnk-role-tagged subnet, rather than hardcoding
-# 10.10.1.1/24. Mirrors the cneinstall module's pattern.
+# Passed to the discovery script so it can DescribeNetworkInterfaces /
+# AssignPrivateIpAddresses on the TMM secondary ENIs and refresh its kubeconfig
+# via `aws eks update-kubeconfig`.
 
 variable "aws_access_key_id" {
   type      = string
@@ -25,20 +25,25 @@ variable "aws_region" {
   type = string
 }
 
-variable "vpc_id" {
-  description = "EKS cluster VPC ID. Used to scope the tag-discovery query for the TMM-external and TMM-internal subnets. Auto-wired from cluster-register / cluster-create."
+variable "eks_cluster_name" {
+  description = "EKS cluster name. The discovery script refreshes an exec-auth kubeconfig via `aws eks update-kubeconfig --name <this>` (avoids the F12 stale-token). Auto-wired from cluster-create / cluster-register."
   type        = string
 }
 
+variable "vpc_id" {
+  description = "EKS cluster VPC ID. Retained for blueprint wiring parity; the discovery script scopes ENI lookups by attachment.instance-id + the f5-bnk:tmm-role tag rather than by VPC. Auto-wired from cluster-create / cluster-register."
+  type        = string
+  default     = ""
+}
+
 # =============================================================================
-# Forge-injected kubeconfig
+# Forge-injected kubeconfig (fallback only)
 # =============================================================================
-# local.forge_kubeconfig is injected at deploy time via a generated
-# bnk_forge_providers.tf. Falls back to forge_kubeconfig_content for
-# unit / local testing.
+# The discovery script generates its own fresh kubeconfig via `aws eks
+# update-kubeconfig`; this is retained for parity / standalone runs.
 
 variable "forge_kubeconfig_content" {
-  description = "Plain-text kubeconfig used for kubectl applies. Forge overrides this at deploy time with a local.forge_kubeconfig reference; the variable default is the local-test fallback. Sensitive."
+  description = "Plain-text kubeconfig. Forge overrides this at deploy time; unused by the discovery script (which refreshes its own). Sensitive."
   type        = string
   sensitive   = true
   default     = ""
@@ -47,91 +52,71 @@ variable "forge_kubeconfig_content" {
 # =============================================================================
 # Upstream gate
 # =============================================================================
-# Multus install is now handled by the cloud-agnostic eks-cluster-install-
-# multus module (vendored from bnk-forge-catalog-shared). The blueprint
-# wires that module's multus_ready output into this variable so the NAD
-# applies below have a plan-time assertion they ran in order.
 
 variable "multus_ready" {
-  description = "Gate from eks-cluster-install-multus. Must be true before NAD CRs can be applied — Multus must be installed so the NetworkAttachmentDefinition CRD exists and the CNI binary is on every node. Auto-wired in the variant blueprints from install-multus.multus_ready."
+  description = "Gate from eks-cluster-install-multus. Must be true (Multus installed, NAD CRD Established) before host-device NADs are applied. Auto-wired from install-multus.multus_ready."
   type        = bool
   default     = false
 }
 
 # =============================================================================
-# NetworkAttachmentDefinitions (external + internal)
+# Host-device NADs
 # =============================================================================
 
 variable "nad_namespace" {
-  description = "Namespace where the NADs are created. MUST match the namespace where the CNEInstance CR lives, because the CNE reconciler resolves NetworkAttachmentDefinitions by name within that namespace. Gold-standard split: f5-cne-system (awsbnkctl bnkconst.InstanceNamespace) — same as cneinstall's instance_namespace. A mismatch stalls the CNEInstance with 'Expected NetworkAttachmentDefinitions not present'."
+  description = "Namespace where the NADs are created (in addition to `default`). MUST match the CNEInstance namespace — the CNE reconciler resolves NetworkAttachmentDefinitions by name within it. Gold-standard split: f5-cne-system."
   type        = string
   default     = "f5-cne-system"
 }
 
 variable "nad_external_name" {
-  description = "NetworkAttachmentDefinition name for the external data plane. Must match the CNEInstance CR's networkAttachments entry."
+  description = "External (client-facing) host-device NAD name. Must match cneinstall's network_attachments[0]. awsbnkctl uses external-netdevice."
   type        = string
-  default     = "ens7-ipvlan-l2"
-}
-
-variable "nad_external_master" {
-  description = "Host interface the external NAD binds to. Default 'ens7' matches the hp-nodes external_eni_device_index=2 → ens7 mapping on AL2023."
-  type        = string
-  default     = "ens7"
+  default     = "external-netdevice"
 }
 
 variable "nad_internal_name" {
-  description = "NetworkAttachmentDefinition name for the internal data plane. Must match the CNEInstance CR's networkAttachments entry."
+  description = "Internal (backend) host-device NAD name. Must match cneinstall's network_attachments[1]. awsbnkctl uses internal-netdevice."
   type        = string
-  default     = "ens8-ipvlan-l2"
+  default     = "internal-netdevice"
 }
 
-variable "nad_internal_master" {
-  description = "Host interface the internal NAD binds to. Default 'ens8' matches hp-nodes internal_eni_device_index=3 → ens8."
+# =============================================================================
+# SelfIP + iface-discovery tuning
+# =============================================================================
+
+variable "selfip_host_offset" {
+  description = "Host octet for the TMM SelfIP within each /24 TMM subnet (awsbnkctl uses .240). The discovery script assigns <subnet>.<offset> as a secondary private IP on each ENI and surfaces it for the F5SPKVlan."
+  type        = number
+  default     = 240
+}
+
+variable "skip_iface_discovery" {
+  description = "When true, skip the privileged iface-discovery probe pod and use the deterministic device-index fallback (ens8/0000:00:08.0 ext, ens7/0000:00:07.0 int — proven on c5n.4xlarge/AL2023). Default false: run discovery for robustness across instance types."
+  type        = bool
+  default     = false
+}
+
+variable "external_pci_fallback" {
+  description = "Fallback external PCI bus id when iface-discovery is skipped/unavailable. Deterministic on c5n.4xlarge/AL2023 (ens8 → 0000:00:08.0)."
+  type        = string
+  default     = "0000:00:08.0"
+}
+
+variable "internal_pci_fallback" {
+  description = "Fallback internal PCI bus id (ens7 → 0000:00:07.0)."
+  type        = string
+  default     = "0000:00:07.0"
+}
+
+variable "external_ifname_fallback" {
+  description = "Fallback external Linux ifname (device-index 3 → ens8)."
   type        = string
   default     = "ens8"
 }
 
-variable "nad_cni_type" {
-  description = "Multus CNI plug-in type. F5 install guide uses 'ipvlan' for AWS; on-prem deploys may use 'host-device' or 'macvlan'."
+variable "internal_ifname_fallback" {
+  description = "Fallback internal Linux ifname (device-index 2 → ens7)."
   type        = string
-  default     = "ipvlan"
-}
-
-variable "nad_ipvlan_mode" {
-  description = "ipvlan mode. F5 reference uses 'l2'. Only used when nad_cni_type = ipvlan."
-  type        = string
-  default     = "l2"
-}
-
-# =============================================================================
-# NAD static-address overrides
-# =============================================================================
-# The CNI 'static' IPAM type requires at least one address per NAD. TMM
-# doesn't actually use this for traffic — the F5 IPAM operator manages real
-# allocation — but the schema needs *something*. By default we DERIVE the
-# placeholder from the first f5-bnk-role-tagged subnet discovered in the
-# cluster VPC, so the NAD is internally consistent with the network the ENI
-# actually lives on.
-#
-# Set these explicitly only to override the derivation (or to use a custom
-# address when discovery returns nothing — see the hardcoded fallback at the
-# bottom of main.tf locals).
-
-variable "nad_external_static_address" {
-  description = "Override for the external NAD's static IPAM placeholder address (CIDR format, e.g. '10.10.1.1/24'). Empty = derive from the first discovered f5-bnk-role=tmm-external subnet."
-  type        = string
-  default     = ""
-}
-
-variable "nad_internal_static_address" {
-  description = "Override for the internal NAD's static IPAM placeholder address. Empty = derive from the first discovered f5-bnk-role=tmm-internal subnet."
-  type        = string
-  default     = ""
-}
-
-variable "nad_static_address_fallback" {
-  description = "Address used when discovery returns no tagged subnets AND no override is set. Default 10.10.1.1/24 matches the F5 install guide's reference value."
-  type        = string
-  default     = "10.10.1.1/24"
+  default     = "ens7"
 }

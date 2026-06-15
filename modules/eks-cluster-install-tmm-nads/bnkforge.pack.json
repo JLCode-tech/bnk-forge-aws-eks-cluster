@@ -3,12 +3,12 @@
   "module": {
     "name": "aws_eks_cluster_install_tmm_nads",
     "path": "modules/eks-cluster-install-tmm-nads",
-    "version": "0.3.0-alpha",
+    "version": "1.0.0-alpha",
     "category": "bnk",
-    "description": "Creates the two AWS-specific NetworkAttachmentDefinitions (ens7-ipvlan-l2 external, ens8-ipvlan-l2 internal) TMM uses on its data-plane secondary ENIs. Discovers the matching f5-bnk-role-tagged subnets at apply time to derive each NAD's static IPAM placeholder. Depends on eks-cluster-install-multus (cloud-agnostic, vendored from bnk-forge-catalog-shared) for the actual Multus CNI install. Runs between eks-cluster-install-multus and eks-cluster-cneinstall in the -with-hp-nodes variant blueprints.",
+    "description": "Host-device TMM data-plane prep (awsbnkctl phase16/17/17c/20): labels the single role=bnk TMM node, assigns SelfIP <subnet>.240 to each tagged secondary ENI, runs an iface-discovery probe (MAC->ifname->PCI) before any TMM pod exists, and applies host-device NADs (external-netdevice/internal-netdevice, pciBusID) in f5-cne-system + default. Surfaces ifname/PCI/SelfIP/AZ for cneinstall. Multus install is handled by eks-cluster-install-multus (depends on it via multus_ready). Runs between install-multus/bnk-prereqs and cneinstall.",
     "provider": "aws",
     "supported_platforms": ["aws_eks"],
-    "tags": ["aws", "eks", "kubernetes", "multus", "cni", "network-attachment-definition", "tmm"],
+    "tags": ["aws", "eks", "kubernetes", "multus", "host-device", "network-attachment-definition", "tmm", "selfip"],
     "maturity": "alpha"
   },
   "deployment_pack": {
@@ -31,21 +31,21 @@
     "required": [
       {
         "module": "modules/eks-cluster-register",
-        "reason": "Provides the kubeconfig context for kubectl applies and the vpc_id used to scope tag-discovery. Auto-wired via Forge's local.forge_kubeconfig injection + vpc_id from_module wiring."
+        "reason": "Provides vpc_id (parity wiring). The discovery script refreshes its own exec-auth kubeconfig via aws eks update-kubeconfig."
       },
       {
         "module": "modules/eks-cluster-install-multus",
-        "reason": "Must run first — Multus must be installed and the NetworkAttachmentDefinition CRD Established before this module applies NAD CRs. multus_ready gate auto-wires from this module's output."
+        "reason": "Multus must be installed and the NAD CRD Established before host-device NADs are applied. multus_ready gate auto-wires from this module's output."
+      },
+      {
+        "module": "modules/eks-cluster-hp-nodes",
+        "reason": "Provides the single role=bnk TMM node + the tagged secondary ENIs (f5-bnk:tmm-role) this module discovers, assigns SelfIPs to, and binds host-device NADs onto."
       }
     ],
     "optional": [
       {
         "module": "modules/eks-cluster-create",
-        "reason": "Alternative upstream — emits the same kubeconfig + vpc_id outputs."
-      },
-      {
-        "module": "modules/eks-cluster-hp-nodes",
-        "reason": "Logical predecessor — HP-nodes attaches the ens7/ens8 secondary ENIs that these NADs bind to AND creates the tagged TMM subnets this module discovers. Wire as depends_on in the blueprint."
+        "reason": "Alternative upstream — emits the same vpc_id output."
       }
     ]
   },
@@ -72,17 +72,15 @@
         "source": "user"
       },
       {
-        "name": "vpc_id",
+        "name": "eks_cluster_name",
         "type": "string",
-        "description": "Cluster VPC ID. Scopes the f5-bnk-role tag-discovery used to derive each NAD's static-address placeholder. Auto-wired from cluster-register / cluster-create.",
-        "source": "module",
-        "from_module": "modules/eks-cluster-register",
-        "from_output": "vpc_id"
+        "description": "EKS cluster name. Used to refresh an exec-auth kubeconfig (aws eks update-kubeconfig) and resolve the TMM node. Auto-wired from the blueprint eks_cluster_name input.",
+        "source": "user"
       },
       {
         "name": "multus_ready",
         "type": "boolean",
-        "description": "Gate from eks-cluster-install-multus. tmm-nads asserts this is true before applying NAD CRs. Auto-wired in variant blueprints from install-multus.multus_ready.",
+        "description": "Gate from eks-cluster-install-multus. Asserted true before host-device NADs are applied.",
         "source": "module",
         "from_module": "modules/eks-cluster-install-multus",
         "from_output": "multus_ready"
@@ -98,118 +96,107 @@
         "default": ""
       },
       {
+        "name": "vpc_id",
+        "type": "string",
+        "description": "Cluster VPC ID (parity wiring). Auto-wired from cluster-register / cluster-create.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "vpc_id",
+        "default": ""
+      },
+      {
         "name": "nad_namespace",
         "type": "string",
-        "description": "Namespace where the NADs are created. MUST match the CNEInstance namespace (the CNE reconciler resolves NADs by name within it). Gold-standard split: f5-cne-system.",
+        "description": "Namespace where the NADs are created (plus `default`). MUST match the CNEInstance namespace. Gold-standard split: f5-cne-system.",
         "source": "user",
         "default": "f5-cne-system"
       },
       {
         "name": "nad_external_name",
         "type": "string",
-        "description": "External NAD name. Must match cneinstall's network_attachments[0].",
+        "description": "External host-device NAD name (→ TMM trunk 1.1). Must match cneinstall network_attachments[0].",
         "source": "user",
-        "default": "ens7-ipvlan-l2"
-      },
-      {
-        "name": "nad_external_master",
-        "type": "string",
-        "description": "Host interface for the external NAD. Default 'ens7' matches hp-nodes external_eni_device_index=2.",
-        "source": "user",
-        "default": "ens7"
+        "default": "external-netdevice"
       },
       {
         "name": "nad_internal_name",
         "type": "string",
-        "description": "Internal NAD name. Must match cneinstall's network_attachments[1].",
+        "description": "Internal host-device NAD name (→ TMM trunk 1.2). Must match cneinstall network_attachments[1].",
         "source": "user",
-        "default": "ens8-ipvlan-l2"
+        "default": "internal-netdevice"
       },
       {
-        "name": "nad_internal_master",
-        "type": "string",
-        "description": "Host interface for the internal NAD. Default 'ens8' matches hp-nodes internal_eni_device_index=3.",
+        "name": "selfip_host_offset",
+        "type": "number",
+        "description": "Host octet for the TMM SelfIP within each /24 TMM subnet (awsbnkctl uses .240).",
         "source": "user",
-        "default": "ens8"
+        "default": 240
       },
       {
-        "name": "nad_cni_type",
-        "type": "string",
-        "description": "Multus CNI plug-in. F5 reference uses 'ipvlan'; on-prem may use 'host-device' or 'macvlan'.",
+        "name": "skip_iface_discovery",
+        "type": "boolean",
+        "description": "Skip the privileged iface-discovery pod and use the deterministic device-index PCI fallback (ens8=0000:00:08.0, ens7=0000:00:07.0).",
         "source": "user",
-        "default": "ipvlan"
-      },
-      {
-        "name": "nad_ipvlan_mode",
-        "type": "string",
-        "description": "ipvlan mode. Only used when nad_cni_type = ipvlan.",
-        "source": "user",
-        "default": "l2"
-      },
-      {
-        "name": "nad_external_static_address",
-        "type": "string",
-        "description": "Explicit override for the external NAD's static-address placeholder. Empty = derive from the first f5-bnk-role=tmm-external subnet discovered in vpc_id (cidrhost(cidr, 1) + matching prefix).",
-        "source": "user",
-        "default": ""
-      },
-      {
-        "name": "nad_internal_static_address",
-        "type": "string",
-        "description": "Explicit override for the internal NAD's static-address placeholder. Empty = derive from the first f5-bnk-role=tmm-internal subnet discovered in vpc_id.",
-        "source": "user",
-        "default": ""
-      },
-      {
-        "name": "nad_static_address_fallback",
-        "type": "string",
-        "description": "Used only when discovery returns no tagged subnets AND no per-NAD override is set. Default 10.10.1.1/24 matches the F5 install guide's reference value.",
-        "source": "user",
-        "default": "10.10.1.1/24"
+        "default": false
       }
     ]
   },
   "outputs": {
     "key_outputs": [
       {
+        "name": "nads_applied",
+        "type": "boolean",
+        "description": "Gate output — SelfIPs assigned + both host-device NADs applied."
+      },
+      {
         "name": "nad_external_name",
         "type": "string",
-        "description": "Final external NAD name."
+        "description": "External NAD name (cneinstall network_attachments[0])."
       },
       {
         "name": "nad_internal_name",
         "type": "string",
-        "description": "Final internal NAD name."
+        "description": "Internal NAD name (cneinstall network_attachments[1])."
       },
       {
-        "name": "nad_namespace",
+        "name": "external_pci",
         "type": "string",
-        "description": "Namespace where NADs were created."
+        "description": "External ENI PCI bus id."
       },
       {
-        "name": "nad_external_static_address",
+        "name": "internal_pci",
         "type": "string",
-        "description": "Resolved static-address placeholder used in the external NAD's ipam stanza (override, derived, or fallback)."
+        "description": "Internal ENI PCI bus id."
       },
       {
-        "name": "nad_internal_static_address",
+        "name": "external_ifname",
         "type": "string",
-        "description": "Resolved static-address placeholder used in the internal NAD's ipam stanza."
+        "description": "External ENI Linux ifname."
       },
       {
-        "name": "discovered_tmm_external_cidrs",
-        "type": "list(string)",
-        "description": "TMM-external subnet CIDRs the module discovered via the f5-bnk-role=tmm-external tag in vpc_id."
+        "name": "internal_ifname",
+        "type": "string",
+        "description": "Internal ENI Linux ifname."
       },
       {
-        "name": "discovered_tmm_internal_cidrs",
-        "type": "list(string)",
-        "description": "TMM-internal subnet CIDRs the module discovered via the f5-bnk-role=tmm-internal tag in vpc_id."
+        "name": "external_selfip",
+        "type": "string",
+        "description": "External TMM SelfIP (<subnet>.240)."
       },
       {
-        "name": "nads_applied",
-        "type": "boolean",
-        "description": "Gate output — true once both NADs are applied. cneinstall depends on this before rendering the CNEInstance CR."
+        "name": "internal_selfip",
+        "type": "string",
+        "description": "Internal TMM SelfIP."
+      },
+      {
+        "name": "selfip_prefixlen",
+        "type": "number",
+        "description": "TMM SelfIP prefix length."
+      },
+      {
+        "name": "tmm_az",
+        "type": "string",
+        "description": "AZ of the single TMM node."
       }
     ]
   },

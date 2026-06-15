@@ -1,220 +1,94 @@
 # =============================================================================
-# eks-cluster-install-tmm-nads
+# eks-cluster-install-tmm-nads — host-device TMM data-plane prep
 # =============================================================================
-# Creates the two AWS-specific NetworkAttachmentDefinitions the HP variant
-# blueprints reference in their CNEInstance CRs:
-#   - ens7-ipvlan-l2 → external data-plane interface on the hp-nodes ens7 ENI
-#   - ens8-ipvlan-l2 → internal data-plane interface on the hp-nodes ens8 ENI
+# Prepares the TMM data plane on the host-device model (awsbnkctl phase16/17/17c/
+# 20). Replaces the old ipvlan-l2 NADs with host-device NADs that bind the TMM
+# pod directly to the real secondary ENIs (by PCI bus id) the hp-nodes bootstrap
+# attached.
 #
-# The Multus CNI install is done by the cloud-agnostic eks-cluster-install-
-# multus module (vendored from bnk-forge-catalog-shared); this module
-# depends on it via var.multus_ready and only handles the AWS-specific
-# bits: tag-discovery of the TMM subnets + the NAD CR applies themselves.
+# Because the secondary ENIs are created by the node bootstrap (not Terraform),
+# and because there is no native resource to assign a secondary private IP to an
+# unmanaged ENI, the imperative work runs in scripts/discover-tmm-dataplane.sh:
+#   1. label the single role=bnk node app=f5-tmm, resolve its instance-id;
+#   2. find the two tagged ENIs (f5-bnk:tmm-role=external|internal), assign
+#      SelfIP <subnet>.240 to each;
+#   3. iface-discovery probe pod: MAC -> Linux ifname + PCI (BEFORE any TMM pod
+#      claims the ENI into its netns);
+#   4. apply host-device NADs (pciBusID) into nad_namespace + default.
 #
-# The CNI 'static' IPAM type requires at least one address. We derive the
-# placeholder from the first f5-bnk-role-tagged subnet discovered in the
-# cluster VPC at apply time, so the NAD is internally consistent with the
-# subnet TMM's secondary ENI actually lives on.
+# The discovered facts (ifname/PCI/SelfIP/subnet/AZ) are written to
+# work/discovery.json and surfaced as module outputs for cneinstall to wire into
+# the CNEInstance host-device env + F5SPKVlan SelfIPs + single-AZ
+# cloud-network-mapping.
 #
-# Sequence:
-#   1. Discover f5-bnk-role=tmm-external and tmm-internal subnets in vpc_id.
-#   2. Apply the external NAD (ens7-ipvlan-l2 by default).
-#   3. Apply the internal NAD (ens8-ipvlan-l2 by default).
+# Runs AFTER install-multus (NAD CRD present) and bnk-prereqs (nad_namespace
+# exists), and BEFORE cneinstall (CNEInstance / TMM pods).
 
-provider "aws" {
-  region     = var.aws_region
-  access_key = var.aws_access_key_id
-  secret_key = var.aws_secret_access_key
-  token      = var.aws_session_token != "" ? var.aws_session_token : null
-}
-
-# =============================================================================
-# TMM subnet discovery (tag-based, scoped to the cluster VPC)
-# =============================================================================
-# Same query cneinstall runs, here so the NAD's static-address placeholder
-# can be derived from the discovered subnet's CIDR. Means the placeholder is
-# inside the actual subnet TMM's ENI lives on — not the hardcoded 10.10.1.1.
-
-data "aws_subnets" "tmm_external_discovered" {
-  filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
+resource "null_resource" "discovery" {
+  triggers = {
+    cluster         = var.eks_cluster_name
+    nad_namespace   = var.nad_namespace
+    ext_nad         = var.nad_external_name
+    int_nad         = var.nad_internal_name
+    selfip_offset   = tostring(var.selfip_host_offset)
+    script_hash     = filesha256("${path.module}/scripts/discover-tmm-dataplane.sh")
+    discovery_file  = "${path.module}/work/discovery.json"
+    kubeconfig_file = "${path.module}/work/kubeconfig"
   }
-  tags = {
-    "f5-bnk-role" = "tmm-external"
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    environment = {
+      EKS_CLUSTER_NAME      = var.eks_cluster_name
+      AWS_REGION            = var.aws_region
+      AWS_ACCESS_KEY_ID     = var.aws_access_key_id
+      AWS_SECRET_ACCESS_KEY = var.aws_secret_access_key
+      AWS_SESSION_TOKEN     = var.aws_session_token
+      NAD_NAMESPACE         = var.nad_namespace
+      EXT_NAD_NAME          = var.nad_external_name
+      INT_NAD_NAME          = var.nad_internal_name
+      SELFIP_OFFSET         = tostring(var.selfip_host_offset)
+      EXT_PCI_FALLBACK      = var.external_pci_fallback
+      INT_PCI_FALLBACK      = var.internal_pci_fallback
+      EXT_IF_FALLBACK       = var.external_ifname_fallback
+      INT_IF_FALLBACK       = var.internal_ifname_fallback
+      SKIP_IFACE_DISCOVERY  = tostring(var.skip_iface_discovery)
+      DISCOVERY_OUT         = "${path.module}/work/discovery.json"
+      KUBECONFIG_OUT        = "${path.module}/work/kubeconfig"
+    }
+    command = "bash '${path.module}/scripts/discover-tmm-dataplane.sh'"
+  }
+
+  # Best-effort NAD teardown. The SelfIPs + ENIs are destroyed with the node
+  # group, so there is nothing to unwind on the AWS side here.
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["bash", "-c"]
+    on_failure  = continue
+    command     = <<-EOT
+      KC="kubectl --kubeconfig ${self.triggers.kubeconfig_file}"
+      for ns in "${self.triggers.nad_namespace}" default; do
+        $KC -n "$ns" delete net-attach-def "${self.triggers.ext_nad}" --ignore-not-found 2>/dev/null || true
+        $KC -n "$ns" delete net-attach-def "${self.triggers.int_nad}" --ignore-not-found 2>/dev/null || true
+      done
+    EOT
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.multus_ready
+      error_message = "Multus must be installed before host-device NADs are applied. Wire install-multus.multus_ready into var.multus_ready in the blueprint."
+    }
   }
 }
 
-data "aws_subnet" "tmm_external_discovered" {
-  for_each = toset(data.aws_subnets.tmm_external_discovered.ids)
-  id       = each.value
-}
-
-data "aws_subnets" "tmm_internal_discovered" {
-  filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
-  }
-  tags = {
-    "f5-bnk-role" = "tmm-internal"
-  }
-}
-
-data "aws_subnet" "tmm_internal_discovered" {
-  for_each = toset(data.aws_subnets.tmm_internal_discovered.ids)
-  id       = each.value
-}
-
-# =============================================================================
-# Forge-injected kubeconfig
-# =============================================================================
-
-resource "local_sensitive_file" "kubeconfig" {
-  filename        = "${path.module}/work/kubeconfig"
-  file_permission = "0600"
-  content         = try(local.forge_kubeconfig, var.forge_kubeconfig_content)
+# Deferred read: depends_on the discovery resource so Terraform reads the file
+# during apply (after the script writes it), not at plan time.
+data "local_file" "discovery" {
+  filename   = "${path.module}/work/discovery.json"
+  depends_on = [null_resource.discovery]
 }
 
 locals {
-  kubectl = "kubectl --kubeconfig ${local_sensitive_file.kubeconfig.filename}"
-
-  # Sorted lists of discovered subnet CIDRs. Sort = deterministic pick when
-  # multiple AZs are tagged; we always take index [0] for the NAD placeholder.
-  tmm_external_cidrs = sort([
-    for s in data.aws_subnet.tmm_external_discovered : s.cidr_block
-  ])
-  tmm_internal_cidrs = sort([
-    for s in data.aws_subnet.tmm_internal_discovered : s.cidr_block
-  ])
-
-  # 3-tier static-address resolution per NAD:
-  #   1. Explicit user override → use it verbatim.
-  #   2. Discovery returned subnets → cidrhost(cidr, 1) + matching prefix.
-  #   3. Both empty → fallback (default F5 reference 10.10.1.1/24).
-  #
-  # cidrhost(cidr, 1) picks the first usable host in the subnet (.1). The
-  # placeholder isn't routed — F5 IPAM operator overrides at runtime — but
-  # keeping it inside the subnet matches what the kernel will see when the
-  # ENI is configured.
-  nad_external_static_address = (
-    var.nad_external_static_address != ""
-    ? var.nad_external_static_address
-    : (
-      length(local.tmm_external_cidrs) > 0
-      ? "${cidrhost(local.tmm_external_cidrs[0], 1)}/${split("/", local.tmm_external_cidrs[0])[1]}"
-      : var.nad_static_address_fallback
-    )
-  )
-
-  nad_internal_static_address = (
-    var.nad_internal_static_address != ""
-    ? var.nad_internal_static_address
-    : (
-      length(local.tmm_internal_cidrs) > 0
-      ? "${cidrhost(local.tmm_internal_cidrs[0], 1)}/${split("/", local.tmm_internal_cidrs[0])[1]}"
-      : var.nad_static_address_fallback
-    )
-  )
-
-  nad_external_manifest = templatefile("${path.module}/manifests/nad.yaml.tftpl", {
-    nad_name       = var.nad_external_name
-    nad_namespace  = var.nad_namespace
-    tmm_role       = "tmm-external"
-    cni_type       = var.nad_cni_type
-    master         = var.nad_external_master
-    ipvlan_mode    = var.nad_ipvlan_mode
-    static_address = local.nad_external_static_address
-  })
-
-  nad_internal_manifest = templatefile("${path.module}/manifests/nad.yaml.tftpl", {
-    nad_name       = var.nad_internal_name
-    nad_namespace  = var.nad_namespace
-    tmm_role       = "tmm-internal"
-    cni_type       = var.nad_cni_type
-    master         = var.nad_internal_master
-    ipvlan_mode    = var.nad_ipvlan_mode
-    static_address = local.nad_internal_static_address
-  })
-}
-
-# =============================================================================
-# External NAD — TMM client-facing (ens7-ipvlan-l2)
-# =============================================================================
-
-resource "null_resource" "nad_external" {
-  triggers = {
-    manifest_sha    = sha256(local.nad_external_manifest)
-    nad_name        = var.nad_external_name
-    nad_namespace   = var.nad_namespace
-    kubeconfig_file = local_sensitive_file.kubeconfig.filename
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["bash", "-c"]
-    command     = <<-EOT
-      set -euo pipefail
-      echo "[tmm-nads] applying external NAD ${var.nad_external_name} (ns=${var.nad_namespace}) static=${local.nad_external_static_address}"
-      cat <<'MANIFEST' | ${local.kubectl} apply -f -
-${local.nad_external_manifest}
-MANIFEST
-    EOT
-  }
-
-  provisioner "local-exec" {
-    when        = destroy
-    interpreter = ["bash", "-c"]
-    on_failure  = continue
-    command     = "kubectl --kubeconfig ${self.triggers.kubeconfig_file} -n ${self.triggers.nad_namespace} delete net-attach-def ${self.triggers.nad_name} --ignore-not-found || true"
-  }
-
-  # Gate on the upstream install-multus module's multus_ready output. Forge
-  # wires this via the pack manifest; explicit precondition guarantees a
-  # plan-time failure if the wiring is dropped.
-  lifecycle {
-    precondition {
-      condition     = var.multus_ready
-      error_message = "Multus must be installed before NAD CRs are applied. Wire install-multus.multus_ready into var.multus_ready in the blueprint."
-    }
-  }
-}
-
-# =============================================================================
-# Internal NAD — TMM backend-facing (ens8-ipvlan-l2)
-# =============================================================================
-
-resource "null_resource" "nad_internal" {
-  triggers = {
-    manifest_sha    = sha256(local.nad_internal_manifest)
-    nad_name        = var.nad_internal_name
-    nad_namespace   = var.nad_namespace
-    kubeconfig_file = local_sensitive_file.kubeconfig.filename
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["bash", "-c"]
-    command     = <<-EOT
-      set -euo pipefail
-      echo "[tmm-nads] applying internal NAD ${var.nad_internal_name} (ns=${var.nad_namespace}) static=${local.nad_internal_static_address}"
-      cat <<'MANIFEST' | ${local.kubectl} apply -f -
-${local.nad_internal_manifest}
-MANIFEST
-    EOT
-  }
-
-  provisioner "local-exec" {
-    when        = destroy
-    interpreter = ["bash", "-c"]
-    on_failure  = continue
-    command     = "kubectl --kubeconfig ${self.triggers.kubeconfig_file} -n ${self.triggers.nad_namespace} delete net-attach-def ${self.triggers.nad_name} --ignore-not-found || true"
-  }
-
-  # Gate on the upstream install-multus module's multus_ready output. Forge
-  # wires this via the pack manifest; explicit precondition guarantees a
-  # plan-time failure if the wiring is dropped.
-  lifecycle {
-    precondition {
-      condition     = var.multus_ready
-      error_message = "Multus must be installed before NAD CRs are applied. Wire install-multus.multus_ready into var.multus_ready in the blueprint."
-    }
-  }
+  disc = jsondecode(data.local_file.discovery.content)
 }

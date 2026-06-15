@@ -2,11 +2,14 @@
 # =============================================================================
 # HP-nodes dual-ENI bootstrap
 # =============================================================================
-# Attaches TWO secondary ENIs at first boot — one from the AZ-matching TMM-
-# external subnet (→ ens7 by default) and one from the AZ-matching TMM-
-# internal subnet (→ ens8). Both carry node.k8s.amazonaws.com/no_manage=true
-# so AWS VPC CNI ignores them and TMM-managed CNI / NADs (ens7-ipvlan-l2 /
-# ens8-ipvlan-l2) can bind cleanly.
+# Attaches TWO secondary ENIs at first boot — the EXTERNAL (client-facing) ENI
+# from the AZ-matching TMM-external subnet at device-index 3 (→ ens8 on AL2023),
+# and the INTERNAL (backend) ENI from the TMM-internal subnet at device-index 2
+# (→ ens7). This matches awsbnkctl phase17 (ext=ens8/idx3, int=ens7/idx2). Each
+# ENI carries node.k8s.amazonaws.com/no_manage=true (VPC CNI ignores it) PLUS
+# f5-cne-device=<ifname> — the tag the BNK cne-controller discovers the host
+# device by (CLOUD_HOST_DEVICE_TAG). The host-device NADs claim these real ENIs
+# into the TMM pod netns by PCI bus id.
 #
 # This runs BEFORE EKS's bootstrap (the parent MIME multipart includes
 # EKS's own boot.sh as a separate part that fires after this script). The
@@ -67,6 +70,11 @@ attach_secondary_eni() {
   local DEVICE_INDEX="$2"
   local ROLE="$3"
 
+  # AL2023 names the secondary ENI deterministically: device_index N → ens(N+5).
+  # The cne-controller discovers the host device by the f5-cne-device tag, so we
+  # tag each ENI with the ifname it will surface as (ens8 ext / ens7 int).
+  local IFNAME="ens$((DEVICE_INDEX + 5))"
+
   local ADDITIONAL_IPS_FLAG=""
 %{ if additional_ips_per_eni > 0 ~}
   ADDITIONAL_IPS_FLAG="--secondary-private-ip-address-count ${additional_ips_per_eni}"
@@ -79,6 +87,7 @@ attach_secondary_eni() {
     --description "tmm-$${ROLE}-eni-$INSTANCE_ID" \
     --tag-specifications "ResourceType=network-interface,Tags=[\
 {Key=node.k8s.amazonaws.com/no_manage,Value=true},\
+{Key=f5-cne-device,Value=$${IFNAME}},\
 {Key=f5-bnk:tmm-role,Value=$${ROLE}},\
 {Key=bnk-forge:module,Value=eks-cluster-hp-nodes},\
 {Key=bnk-forge:cluster,Value=${eks_cluster_name}},\

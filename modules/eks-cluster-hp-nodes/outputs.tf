@@ -20,7 +20,7 @@ output "tmm_external_subnet_cidrs" {
 output "tmm_external_subnets_by_az" {
   description = "AZ → TMM-external subnets, in the same shape cluster-register / cluster-create emit. cneinstall rediscovers the same set internally at apply time via the f5-bnk-role=tmm-external tag, so this output is mainly for diagnostics."
   value = [
-    for i, az in var.availability_zones : {
+    for i, az in local.hp_azs : {
       name = az
       subnets = [{
         cidr      = local.tmm_external_subnet_cidrs[i]
@@ -52,7 +52,7 @@ output "tmm_internal_subnet_cidrs" {
 output "tmm_internal_subnets_by_az" {
   description = "AZ → TMM-internal subnets, structured. cneinstall rediscovers the same set internally at apply time via the f5-bnk-role=tmm-internal tag."
   value = [
-    for i, az in var.availability_zones : {
+    for i, az in local.hp_azs : {
       name = az
       subnets = [{
         cidr      = local.tmm_internal_subnet_cidrs[i]

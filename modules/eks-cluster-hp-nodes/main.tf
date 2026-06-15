@@ -2,8 +2,10 @@
 # eks-cluster-hp-nodes
 # =============================================================================
 # Adds a dedicated high-performance EKS managed node group to an existing
-# cluster for hosting TMM data-plane pods. Implements the generic 3-interface
-# TMM model: CNI (ens5) + external (ens7) + internal (ens8).
+# cluster for hosting TMM data-plane pods. Implements the 3-interface TMM model
+# on the awsbnkctl host-device mapping: CNI (ens5) + external (ens8, idx 3) +
+# internal (ens7, idx 2). Single-TMM demo by default (single_az_demo pins the
+# pool + TMM subnets to one AZ; see D-033).
 #
 # What this module does:
 #
@@ -16,10 +18,12 @@
 #      so the bootstrap user-data can self-attach the two secondary ENIs.
 #   3. Creates a launch template (IMDSv2-required, EBS-encrypted) with custom
 #      user-data that wraps EKS's own bootstrap: at first boot the script
-#      creates + attaches two secondary ENIs, one in the AZ-matching TMM-
-#      external subnet (device_index 2 → ens7) and one in the AZ-matching
-#      TMM-internal subnet (device_index 3 → ens8), each tagged
-#      node.k8s.amazonaws.com/no_manage=true so VPC CNI ignores them.
+#      creates + attaches two secondary ENIs — the EXTERNAL one in the AZ-
+#      matching TMM-external subnet at device_index 3 → ens8, and the INTERNAL
+#      one in the TMM-internal subnet at device_index 2 → ens7 (awsbnkctl
+#      phase17 mapping). Each is tagged node.k8s.amazonaws.com/no_manage=true
+#      (VPC CNI ignores it) plus f5-cne-device=<ifname> (the tag the cne-
+#      controller discovers the host device by).
 #   4. Creates an EKS managed node group using that launch template, with
 #      node label app=f5-tmm so FLO schedules TMM pods here, and optional
 #      taints for full pool dedication.
@@ -28,10 +32,10 @@
 # brownfield) — only requires the upstream module's vpc_id, vpc_cidr,
 # private_subnet_ids, availability_zones, and eks_cluster_name outputs.
 #
-# NetworkAttachmentDefinitions for ens7 and ens8 are a manual prerequisite
-# until a dedicated NAD-provisioning module exists. The variant blueprints
-# reference these by name (ens7-ipvlan-l2 + ens8-ipvlan-l2) in the
-# CNEInstance CR's networkAttachments field.
+# The host-device NetworkAttachmentDefinitions (external-netdevice /
+# internal-netdevice) + SelfIP assignment + iface-discovery are handled by the
+# eks-cluster-install-tmm-nads module, which discovers the ENIs this module's
+# bootstrap tags (f5-bnk:tmm-role + f5-cne-device).
 
 provider "aws" {
   region     = var.aws_region
@@ -47,7 +51,11 @@ data "aws_eks_cluster" "this" {
 data "aws_partition" "current" {}
 
 locals {
-  az_count = length(var.availability_zones)
+  # Single-TMM demo (awsbnkctl phase16): pin HP nodes + TMM subnets to ONE AZ so
+  # there is exactly one role=bnk TMM node and the downstream iface-discovery +
+  # SelfIP assignment are unambiguous. Set single_az_demo=false for per-AZ HA.
+  hp_azs   = var.single_az_demo ? slice(var.availability_zones, 0, 1) : var.availability_zones
+  az_count = length(local.hp_azs)
 
   # TMM-external subnet CIDRs (explicit override OR auto-carve).
   tmm_external_subnet_cidrs = length(var.tmm_external_subnet_cidrs) > 0 ? var.tmm_external_subnet_cidrs : [
@@ -60,6 +68,14 @@ locals {
     for i in range(local.az_count) :
     cidrsubnet(var.vpc_cidr, var.tmm_internal_subnet_newbits, var.tmm_internal_subnet_index_offset + i)
   ]
+
+  # Restrict the HP node group's PRIMARY ENI placement to the pinned AZ(s) so the
+  # bootstrap (which attaches secondary ENIs from the AZ-matching TMM subnet)
+  # never lands a node in an AZ that has no TMM subnet. When single_az_demo is
+  # off, all node subnets are eligible.
+  hp_node_subnet_ids = var.single_az_demo ? [
+    for id, s in data.aws_subnet.node : id if contains(local.hp_azs, s.availability_zone)
+  ] : var.node_subnet_ids
 
   common_tags = merge(var.tags, {
     "bnk-forge:module"  = "eks-cluster-hp-nodes"
@@ -84,14 +100,21 @@ locals {
 
   # AZ → subnet ID maps rendered into the user-data template.
   tmm_external_subnet_by_az = {
-    for i, az in var.availability_zones :
+    for i, az in local.hp_azs :
     az => aws_subnet.tmm_external[i].id
   }
 
   tmm_internal_subnet_by_az = {
-    for i, az in var.availability_zones :
+    for i, az in local.hp_azs :
     az => aws_subnet.tmm_internal[i].id
   }
+}
+
+# Resolve the AZ of each candidate node subnet so single_az_demo can keep the HP
+# node group's primary ENI in the pinned AZ (where the TMM subnets exist).
+data "aws_subnet" "node" {
+  for_each = toset(var.node_subnet_ids)
+  id       = each.value
 }
 
 # =============================================================================
@@ -102,11 +125,11 @@ resource "aws_subnet" "tmm_external" {
   count                   = local.az_count
   vpc_id                  = var.vpc_id
   cidr_block              = local.tmm_external_subnet_cidrs[count.index]
-  availability_zone       = var.availability_zones[count.index]
+  availability_zone       = local.hp_azs[count.index]
   map_public_ip_on_launch = false
 
   tags = merge(local.tmm_external_subnet_tags, {
-    Name = "${var.eks_cluster_name}-tmm-ext-${var.availability_zones[count.index]}"
+    Name = "${var.eks_cluster_name}-tmm-ext-${local.hp_azs[count.index]}"
   })
 }
 
@@ -118,11 +141,11 @@ resource "aws_subnet" "tmm_internal" {
   count                   = local.az_count
   vpc_id                  = var.vpc_id
   cidr_block              = local.tmm_internal_subnet_cidrs[count.index]
-  availability_zone       = var.availability_zones[count.index]
+  availability_zone       = local.hp_azs[count.index]
   map_public_ip_on_launch = false
 
   tags = merge(local.tmm_internal_subnet_tags, {
-    Name = "${var.eks_cluster_name}-tmm-int-${var.availability_zones[count.index]}"
+    Name = "${var.eks_cluster_name}-tmm-int-${local.hp_azs[count.index]}"
   })
 }
 
@@ -274,7 +297,7 @@ resource "aws_eks_node_group" "hp" {
   cluster_name    = data.aws_eks_cluster.this.name
   node_group_name = "${var.eks_cluster_name}-hp"
   node_role_arn   = aws_iam_role.hp_node.arn
-  subnet_ids      = var.node_subnet_ids
+  subnet_ids      = local.hp_node_subnet_ids
 
   instance_types = [var.instance_type]
   ami_type       = "AL2023_x86_64_STANDARD"

@@ -174,15 +174,107 @@ variable "watch_namespaces" {
 }
 
 variable "network_attachments" {
-  description = "NetworkAttachmentDefinition names the TMM data plane uses. Defaults to the ipvlan NAD applied by the network-setup module."
+  description = "NetworkAttachmentDefinition names the TMM data plane uses, in order: [0] → TMM trunk 1.1 (external), [1] → trunk 1.2 (internal). Host-device NADs are applied by the tmm-nads module (external-netdevice / internal-netdevice)."
   type        = list(string)
-  default     = ["ens7-ipvlan-l2"]
+  default     = ["external-netdevice", "internal-netdevice"]
 }
 
 variable "storage_class_name" {
   description = "Kubernetes StorageClass for CNEInstance persistent state. AWS gp3 is the default per the EKS BNK install guide."
   type        = string
   default     = "gp3"
+}
+
+# =============================================================================
+# Host-device TMM dataplane (D-033) — wired from tmm-nads outputs
+# =============================================================================
+# These feed the CNEInstance host-device binding env + the F5SPKVlan SelfIPs.
+# Empty defaults keep the module usable for non-host-device callers (the
+# CNEInstance falls back to the deterministic ens8/ens7 mapping and the
+# F5SPKVlan/GatewayClass step is skipped when external_selfip is empty).
+
+variable "external_ifname" {
+  description = "Linux ifname of the external TMM ENI (CLOUD_HOST_DEVICE_NAME, ROBIN_VFIO_RESOURCE_1, PCIDEVICE_INTEL_COM_<IF>). Auto-wired from tmm-nads.external_ifname."
+  type        = string
+  default     = ""
+}
+
+variable "internal_ifname" {
+  description = "Linux ifname of the internal TMM ENI (ROBIN_VFIO_RESOURCE_2). Auto-wired from tmm-nads.internal_ifname."
+  type        = string
+  default     = ""
+}
+
+variable "external_pci" {
+  description = "PCI bus id of the external TMM ENI (PCIDEVICE_INTEL_COM_<EXT_IF>). Auto-wired from tmm-nads.external_pci."
+  type        = string
+  default     = ""
+}
+
+variable "internal_pci" {
+  description = "PCI bus id of the internal TMM ENI. Auto-wired from tmm-nads.internal_pci."
+  type        = string
+  default     = ""
+}
+
+variable "external_selfip" {
+  description = "External TMM SelfIP (<subnet>.240) announced by the ext-vlan F5SPKVlan. Empty disables the F5SPKVlan/GatewayClass step. Auto-wired from tmm-nads.external_selfip."
+  type        = string
+  default     = ""
+}
+
+variable "internal_selfip" {
+  description = "Internal TMM SelfIP announced by the int-vlan F5SPKVlan. Empty = external-only (single-interface). Auto-wired from tmm-nads.internal_selfip."
+  type        = string
+  default     = ""
+}
+
+variable "selfip_prefixlen" {
+  description = "Prefix length for the TMM SelfIPs (subnet prefix; 24 for /24 TMM subnets). Auto-wired from tmm-nads.selfip_prefixlen."
+  type        = number
+  default     = 24
+}
+
+variable "tmm_az" {
+  description = "AZ of the single TMM node. When set, the cloud-network-mapping ConfigMap is restricted to this AZ (awsbnkctl single-AZ model). Empty = include all AZs. Auto-wired from tmm-nads.tmm_az."
+  type        = string
+  default     = ""
+}
+
+variable "tmm_mtu" {
+  description = "TMM default MTU (TMM_DEFAULT_MTU). awsbnkctl proven value 9000 (jumbo)."
+  type        = number
+  default     = 9000
+}
+
+variable "tmm_cpu" {
+  description = "TMM CPU limit/request. awsbnkctl proven value 2 (TmmCpu=4 + PAL 0-3 segfaults)."
+  type        = string
+  default     = "2"
+}
+
+variable "tmm_memory" {
+  description = "TMM memory limit/request. awsbnkctl proven value 8Gi."
+  type        = string
+  default     = "8Gi"
+}
+
+variable "tmm_hugepages" {
+  description = "TMM hugepages-2Mi limit/request. awsbnkctl proven value 4Gi."
+  type        = string
+  default     = "4Gi"
+}
+
+variable "pal_cpu_set" {
+  description = "TMM PAL_CPU_SET. awsbnkctl proven value 0,2 (TmmCpu=2)."
+  type        = string
+  default     = "0,2"
+}
+
+variable "spkvlan_crd_timeout_seconds" {
+  description = "Max seconds to wait for FLO to install the f5-spk-vlans + gatewayclasses CRDs after the CNEInstance reconciles, before applying the F5SPKVlan/GatewayClass CRs."
+  type        = number
+  default     = 600
 }
 
 # =============================================================================

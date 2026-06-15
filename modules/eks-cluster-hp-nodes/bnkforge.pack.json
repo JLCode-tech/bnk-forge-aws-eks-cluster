@@ -3,7 +3,7 @@
   "module": {
     "name": "aws_eks_cluster_hp_nodes",
     "path": "modules/eks-cluster-hp-nodes",
-    "version": "0.3.0-alpha",
+    "version": "0.4.0-alpha",
     "category": "infra",
     "description": "Add a dedicated high-performance EKS managed node group for hosting TMM data-plane pods. Implements the generic 3-interface TMM model: CNI (ens5, VPC CNI) + external (ens7, on TMM-external subnet) + internal (ens8, on TMM-internal subnet). Creates per-AZ subnet pairs (tagged f5-bnk-role=tmm-external / tmm-internal), an IAM node role with ENI-management permissions, a launch template that bootstraps both secondary ENIs at first boot with node.k8s.amazonaws.com/no_manage=true, and the node group with app=f5-tmm label. Used by aws-eks-existing-cluster-with-hp-nodes + aws-eks-cluster-create-with-hp-nodes blueprints.",
     "provider": "aws",

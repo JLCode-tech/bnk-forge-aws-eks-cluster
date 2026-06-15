@@ -1,17 +1,17 @@
 {
   "module": {
-    "name": "EKS Cluster Install TMM NADs",
+    "name": "EKS Cluster TMM Host-Device Dataplane",
     "path": "modules/eks-cluster-install-tmm-nads",
-    "version": "0.3.0-alpha",
+    "version": "1.0.0-alpha",
     "layer": "application",
     "category": "bnk",
-    "description": "Creates the two AWS-specific NetworkAttachmentDefinitions (ens7-ipvlan-l2 external, ens8-ipvlan-l2 internal) TMM uses on its data-plane secondary ENIs, with apply-time tag discovery to derive each NAD's static IPAM placeholder. Multus CNI install itself is handled by the cloud-agnostic eks-cluster-install-multus module (vendored from bnk-forge-catalog-shared) — this module depends on it via multus_ready.",
+    "description": "Prepares the host-device TMM data plane (awsbnkctl phase16/17/17c/20): labels the single role=bnk TMM node, assigns SelfIP <subnet>.240 to each tagged secondary ENI, runs an iface-discovery probe (MAC->ifname->PCI) before any TMM pod exists, and applies host-device NADs (external-netdevice/internal-netdevice, pciBusID) in f5-cne-system + default. Surfaces ifname/PCI/SelfIP/AZ for cneinstall. Multus install is handled by the cloud-agnostic eks-cluster-install-multus module (depends on it via multus_ready).",
     "cloud_specific": true,
     "supported_platforms": ["aws_eks"]
   },
   "source": {
     "kind": "official",
-    "channel": "release/2.2"
+    "channel": "release/2.3"
   },
   "execution": {
     "engine": "opentofu",
@@ -24,19 +24,38 @@
     "required": [
       {
         "module": "modules/eks-cluster-install-multus",
-        "reason": "Multus must be installed and the NetworkAttachmentDefinition CRD Established before this module applies NAD CRs."
+        "reason": "Multus must be installed and the NetworkAttachmentDefinition CRD Established before host-device NADs are applied."
+      },
+      {
+        "module": "modules/eks-cluster-hp-nodes",
+        "reason": "Provides the single role=bnk TMM node + the tagged secondary ENIs (f5-bnk:tmm-role) this module discovers and binds."
       }
     ],
     "optional": [
       {
-        "module": "modules/eks-cluster-hp-nodes",
-        "reason": "Logical predecessor — the NADs bind to the ens7/ens8 ENIs hp-nodes attaches AND hp-nodes creates the tagged TMM subnets this module discovers."
+        "module": "modules/eks-cluster-install-bnk-prereqs",
+        "reason": "Owns nad_namespace (f5-cne-system); must exist before the NADs are applied there."
       }
     ]
   },
   "inputs": {
     "required": [],
     "optional": [
+      {
+        "name": "eks_cluster_name",
+        "type": "string",
+        "description": "EKS cluster name — used to refresh an exec-auth kubeconfig (aws eks update-kubeconfig).",
+        "source": "user"
+      },
+      {
+        "name": "vpc_id",
+        "type": "string",
+        "description": "Cluster VPC ID (parity wiring).",
+        "default": "",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "vpc_id"
+      },
       {
         "name": "multus_ready",
         "type": "boolean",
@@ -56,15 +75,29 @@
       {
         "name": "nad_external_name",
         "type": "string",
-        "description": "External NAD name.",
-        "default": "ens7-ipvlan-l2",
+        "description": "External host-device NAD name (→ trunk 1.1).",
+        "default": "external-netdevice",
         "source": "user"
       },
       {
         "name": "nad_internal_name",
         "type": "string",
-        "description": "Internal NAD name.",
-        "default": "ens8-ipvlan-l2",
+        "description": "Internal host-device NAD name (→ trunk 1.2).",
+        "default": "internal-netdevice",
+        "source": "user"
+      },
+      {
+        "name": "selfip_host_offset",
+        "type": "number",
+        "description": "Host octet for the TMM SelfIP within each /24 TMM subnet (awsbnkctl uses .240).",
+        "default": 240,
+        "source": "user"
+      },
+      {
+        "name": "skip_iface_discovery",
+        "type": "boolean",
+        "description": "Skip the privileged iface-discovery pod and use the deterministic device-index PCI fallback.",
+        "default": false,
         "source": "user"
       }
     ]
@@ -74,21 +107,77 @@
       {
         "name": "nads_applied",
         "type": "boolean",
-        "description": "Gate output: both NADs applied.",
+        "description": "Gate output: SelfIPs assigned + both host-device NADs applied.",
         "used_by": ["modules/eks-cluster-cneinstall"],
         "sensitive": false
       },
       {
         "name": "nad_external_name",
         "type": "string",
-        "description": "Final external NAD name (echoed back).",
+        "description": "External NAD name (cneinstall network_attachments[0]).",
         "used_by": ["modules/eks-cluster-cneinstall"],
         "sensitive": false
       },
       {
         "name": "nad_internal_name",
         "type": "string",
-        "description": "Final internal NAD name.",
+        "description": "Internal NAD name (cneinstall network_attachments[1]).",
+        "used_by": ["modules/eks-cluster-cneinstall"],
+        "sensitive": false
+      },
+      {
+        "name": "external_pci",
+        "type": "string",
+        "description": "External ENI PCI bus id (CNEInstance PCIDEVICE env + host-device NAD).",
+        "used_by": ["modules/eks-cluster-cneinstall"],
+        "sensitive": false
+      },
+      {
+        "name": "internal_pci",
+        "type": "string",
+        "description": "Internal ENI PCI bus id.",
+        "used_by": ["modules/eks-cluster-cneinstall"],
+        "sensitive": false
+      },
+      {
+        "name": "external_ifname",
+        "type": "string",
+        "description": "External ENI Linux ifname (CLOUD_HOST_DEVICE_NAME / ROBIN_VFIO_RESOURCE_1).",
+        "used_by": ["modules/eks-cluster-cneinstall"],
+        "sensitive": false
+      },
+      {
+        "name": "internal_ifname",
+        "type": "string",
+        "description": "Internal ENI Linux ifname (ROBIN_VFIO_RESOURCE_2).",
+        "used_by": ["modules/eks-cluster-cneinstall"],
+        "sensitive": false
+      },
+      {
+        "name": "external_selfip",
+        "type": "string",
+        "description": "External TMM SelfIP (<subnet>.240) for the ext-vlan F5SPKVlan.",
+        "used_by": ["modules/eks-cluster-cneinstall"],
+        "sensitive": false
+      },
+      {
+        "name": "internal_selfip",
+        "type": "string",
+        "description": "Internal TMM SelfIP for the int-vlan F5SPKVlan.",
+        "used_by": ["modules/eks-cluster-cneinstall"],
+        "sensitive": false
+      },
+      {
+        "name": "selfip_prefixlen",
+        "type": "number",
+        "description": "TMM SelfIP prefix length (subnet prefix).",
+        "used_by": ["modules/eks-cluster-cneinstall"],
+        "sensitive": false
+      },
+      {
+        "name": "tmm_az",
+        "type": "string",
+        "description": "AZ of the single TMM node (scopes single-AZ cloud-network-mapping).",
         "used_by": ["modules/eks-cluster-cneinstall"],
         "sensitive": false
       }
@@ -100,7 +189,7 @@
   },
   "deployment": {
     "order": 25,
-    "estimated_time": "3 minutes",
+    "estimated_time": "4 minutes",
     "requires_user_input": false,
     "sensitive_inputs": []
   }

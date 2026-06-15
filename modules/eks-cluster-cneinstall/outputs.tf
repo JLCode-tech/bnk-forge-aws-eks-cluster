@@ -48,6 +48,18 @@ output "effective_tmm_replicas" {
   value       = local.effective_tmm_replicas
 }
 
+output "gatewayclass_name" {
+  description = "Name of the GatewayClass applied for the host-device dataplane (empty when no SelfIP was wired)."
+  value       = var.external_selfip != "" ? local.gatewayclass_name : ""
+}
+
+output "host_device_applied" {
+  description = "True once the host-device F5SPKVlan + GatewayClass step ran (i.e. a SelfIP was wired from tmm-nads)."
+  value       = var.external_selfip != ""
+
+  depends_on = [null_resource.spkvlan_gatewayclass]
+}
+
 # NOTE: cneinstance_ready and license_active are no longer re-exported here.
 # The readiness gate and license-activation gate are now standalone chain modules
 # (eks-cluster-cneinstance-ready-gate / eks-cluster-license-activation-gate) that

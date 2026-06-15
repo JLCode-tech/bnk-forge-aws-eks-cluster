@@ -3,7 +3,7 @@
   "module": {
     "name": "EKS Cluster CNEInstall",
     "path": "modules/eks-cluster-cneinstall",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "category": "bnk",
     "description": "Apply the CNEInstance CR on AWS EKS, lay down the cloud-network-mapping ConfigMap and (optionally) the BNKGateway CR (kind: F5BnkGateway) for VIP allocation, and wire AWS IRSA for the CNE controller (IAM role + OIDC trust + SA annotation + rollout-restart).",
     "provider": "aws",
@@ -64,6 +64,10 @@
       {
         "module": "modules/eks-cluster-install-flo",
         "reason": "FLO must be running and BNK CRDs registered before applying CNEInstance"
+      },
+      {
+        "module": "modules/eks-cluster-install-tmm-nads",
+        "reason": "Host-device dataplane: provides discovered ifname/PCI/SelfIP/AZ for the CNEInstance host-device env + F5SPKVlan, and applies the host-device NADs the CNEInstance references."
       }
     ],
     "optional": []
@@ -242,9 +246,81 @@
       {
         "name": "network_attachments",
         "type": "list(string)",
-        "description": "NAD names attached to TMM. Defaults to the ipvlan NAD that the future network-setup module will provide.",
-        "default": ["ens7-ipvlan-l2"],
+        "description": "NAD names attached to TMM, in order: [0] → trunk 1.1 (external), [1] → trunk 1.2 (internal). Host-device NADs applied by tmm-nads.",
+        "default": ["external-netdevice", "internal-netdevice"],
         "source": "user"
+      },
+      {
+        "name": "external_ifname",
+        "type": "string",
+        "description": "External TMM ENI ifname (host-device CNEInstance env). Auto-wired from tmm-nads.external_ifname.",
+        "default": "",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-tmm-nads",
+        "from_output": "external_ifname"
+      },
+      {
+        "name": "internal_ifname",
+        "type": "string",
+        "description": "Internal TMM ENI ifname. Auto-wired from tmm-nads.internal_ifname.",
+        "default": "",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-tmm-nads",
+        "from_output": "internal_ifname"
+      },
+      {
+        "name": "external_pci",
+        "type": "string",
+        "description": "External TMM ENI PCI bus id (PCIDEVICE_INTEL_COM_<IF>). Auto-wired from tmm-nads.external_pci.",
+        "default": "",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-tmm-nads",
+        "from_output": "external_pci"
+      },
+      {
+        "name": "internal_pci",
+        "type": "string",
+        "description": "Internal TMM ENI PCI bus id. Auto-wired from tmm-nads.internal_pci.",
+        "default": "",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-tmm-nads",
+        "from_output": "internal_pci"
+      },
+      {
+        "name": "external_selfip",
+        "type": "string",
+        "description": "External TMM SelfIP (ext-vlan F5SPKVlan). Empty disables the host-device F5SPKVlan/GatewayClass step. Auto-wired from tmm-nads.external_selfip.",
+        "default": "",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-tmm-nads",
+        "from_output": "external_selfip"
+      },
+      {
+        "name": "internal_selfip",
+        "type": "string",
+        "description": "Internal TMM SelfIP (int-vlan F5SPKVlan). Auto-wired from tmm-nads.internal_selfip.",
+        "default": "",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-tmm-nads",
+        "from_output": "internal_selfip"
+      },
+      {
+        "name": "selfip_prefixlen",
+        "type": "number",
+        "description": "TMM SelfIP prefix length. Auto-wired from tmm-nads.selfip_prefixlen.",
+        "default": 24,
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-tmm-nads",
+        "from_output": "selfip_prefixlen"
+      },
+      {
+        "name": "tmm_az",
+        "type": "string",
+        "description": "AZ of the single TMM node — restricts cloud-network-mapping to one AZ. Auto-wired from tmm-nads.tmm_az.",
+        "default": "",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-tmm-nads",
+        "from_output": "tmm_az"
       },
       {
         "name": "storage_class_name",

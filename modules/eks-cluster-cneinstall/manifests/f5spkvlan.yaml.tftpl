@@ -1,0 +1,39 @@
+# F5SPKVlan CRs — TMM VLAN + SelfIP plumbing for the host-device pattern
+# (awsbnkctl phase23b). Binds TMM data-plane trunks 1.1 / 1.2 to named virtual
+# interfaces ext-vlan / int-vlan inside the TMM pod netns and announces the
+# SelfIPs that match the AWS ENI subnets. Trunk numbering follows the CNEInstance
+# .spec.networkAttachments order: [0]=external → 1.1, [1]=internal → 1.2.
+# The tmm-nads module already assigned these SelfIPs as secondary IPs on the ENIs
+# (ec2:AssignPrivateIpAddresses) so the cloud routes them to the TMM ENI.
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata:
+  name: ext-vlan
+  namespace: ${instance_namespace}
+spec:
+  name: ext-vlan
+  interfaces:
+    - "1.1"
+  selfip_v4s:
+    - "${external_selfip}"
+  prefixlen_v4: ${selfip_prefixlen}
+  tag: 0
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+%{ if has_internal ~}
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata:
+  name: int-vlan
+  namespace: ${instance_namespace}
+spec:
+  name: int-vlan
+  internal: true
+  interfaces:
+    - "1.2"
+  selfip_v4s:
+    - "${internal_selfip}"
+  prefixlen_v4: ${selfip_prefixlen}
+  tag: 0
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+%{ endif ~}

@@ -28,6 +28,9 @@ spec:
     imagePullSecrets:
       - name: ${far_secret_name}
     imagePullPolicy: Always
+  # networkAttachments order is significant: entry [0] → TMM trunk 1.1 (external,
+  # ext-vlan), entry [1] → trunk 1.2 (internal, int-vlan). Host-device NADs are
+  # applied by the tmm-nads module (external-netdevice / internal-netdevice).
   networkAttachments:
 %{ for nad in network_attachments ~}
     - ${nad}
@@ -53,24 +56,64 @@ spec:
       stopOnFail: true
       runAfterSuccess: true
     cneController:
+      # Host-device cloud binding (awsbnkctl phase22 render): tells the
+      # cne-controller this is an AWS host-device deploy and how to find +
+      # program the SelfIP onto the real ENI. CLOUD_HOST_DEVICE_TAG is the ENI
+      # tag (f5-cne-device) hp-nodes stamps; CLOUD_HOST_DEVICE_NAME is the
+      # external ifname. Without these the controller validates the F5SPKVlan but
+      # never programs the SelfIP → MinSelfIPCount=0 → TMM standby (D-033).
       env:
         - name: TMM_DEFAULT_MTU
-          value: "9000"
+          value: "${tmm_mtu}"
         - name: CLOUD_ENV
           value: "true"
         - name: CLOUD_PROVIDER
           value: "aws"
         - name: CLOUD_NETWORK_CONFIGMAP
           value: "cloud-network-mapping"
+        - name: PLATFORM_TYPE
+          value: "AWS"
+        - name: CLOUD_VPC
+          value: "${vpc_id}"
+        - name: CLOUD_REGION
+          value: "${aws_region}"
+        - name: CLOUD_HOST_DEVICE_NAME
+          value: "${external_ifname}"
+        - name: CLOUD_HOST_DEVICE_TAG
+          value: "f5-cne-device"
     demoMode:
       enabled: false
     maintenanceMode:
       enabled: false
     tmm:
+      resources:
+        limits:
+          cpu: "${tmm_cpu}"
+          memory: "${tmm_memory}"
+          hugepages-2Mi: "${tmm_hugepages}"
+        requests:
+          cpu: "${tmm_cpu}"
+          memory: "${tmm_memory}"
+          hugepages-2Mi: "${tmm_hugepages}"
+      # Host-device TMM env (awsbnkctl phase22): generic-socket-driver +
+      # ROBIN_VFIO_RESOURCE_N → ifname + PCIDEVICE_INTEL_COM_<IFNAME> → PCI bus id
+      # bind TMM's data-plane trunks to the real ENIs the host-device NADs claim.
       env:
+        - name: TMM_CALICO_ROUTER
+          value: "default"
         - name: TMM_DEFAULT_MTU
-          value: "9000"
+          value: "${tmm_mtu}"
         - name: PAL_CPU_SET
-          value: "0,2"
+          value: "${pal_cpu_set}"
         - name: TMM_MAPRES_ADDL_VETHS_ON_DP
           value: "TRUE"
+        - name: TMM_GENERIC_SOCKET_DRIVER
+          value: "true"
+        - name: ROBIN_VFIO_RESOURCE_1
+          value: "${external_ifname}"
+        - name: ROBIN_VFIO_RESOURCE_2
+          value: "${internal_ifname}"
+        - name: PCIDEVICE_INTEL_COM_${external_ifname_upper}
+          value: "${external_pci}"
+        - name: PCIDEVICE_INTEL_COM_${internal_ifname_upper}
+          value: "${internal_pci}"
