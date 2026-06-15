@@ -233,7 +233,8 @@
         "aws_access_key_id": "${aws_access_key_id}",
         "aws_secret_access_key": "${aws_secret_access_key}",
         "aws_session_token": "${aws_session_token}",
-        "aws_region": "${aws_region}"
+        "aws_region": "${aws_region}",
+        "nad_namespace": "f5-cne-system"
       }
     },
     {
@@ -249,7 +250,9 @@
       ],
       "inputs": {
         "cluster_name": "${eks_cluster_name}",
-        "cne_pull_secret": "${cne_pull_secret}"
+        "cne_pull_secret": "${cne_pull_secret}",
+        "operator_namespace": "f5-cne-core",
+        "instance_namespace": "f5-cne-system"
       }
     },
     {
