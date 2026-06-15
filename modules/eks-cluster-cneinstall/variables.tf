@@ -279,6 +279,20 @@ variable "vip_network_name" {
   default     = "default"
 }
 
+variable "enable_bnk_gateway" {
+  description = <<-EOT
+    Whether to render + apply the BNKGateway CR (kind: F5BnkGateway, group
+    k8s.f5net.com). This is a TRAFFIC-PLANE (step-4) resource: its CRD is
+    installed by the SPK / Gateway-API traffic components, NOT by cneinstall or
+    FLO. With it off (default), the cluster reaches CNEInstance-ready +
+    License-Active without the traffic-plane CRDs present. Enable it only after
+    the step-4 spkvlan/gatewayclass modules have registered the F5BnkGateway CRD,
+    otherwise the kubectl apply fails with "no matches for kind F5BnkGateway".
+  EOT
+  type        = bool
+  default     = false
+}
+
 # =============================================================================
 # IRSA tuning (rarely overridden)
 # =============================================================================

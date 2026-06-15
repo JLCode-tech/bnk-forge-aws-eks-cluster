@@ -141,7 +141,10 @@ locals {
 
   vip_cidr_set                 = var.vip_cidr != ""
   tmm_external_subnets_present = length(local.effective_tmm_external_subnets_by_az) > 0
-  bnk_gateway_enabled          = local.vip_cidr_set || local.tmm_external_subnets_present
+  # bnk_gateway is traffic-plane (step-4): its F5BnkGateway CRD is absent until
+  # the spkvlan/gatewayclass modules run. Gate behind an explicit opt-in so the
+  # Active path (CNEInstance-ready + License-Active) doesn't fail on a missing CRD.
+  bnk_gateway_enabled          = var.enable_bnk_gateway && (local.vip_cidr_set || local.tmm_external_subnets_present)
 
   # Explicit override path: single entry from the user-supplied CIDR.
   explicit_listener_networks = local.vip_cidr_set ? [{
@@ -332,7 +335,7 @@ resource "aws_iam_policy" "cne_controller_vip" {
 
 resource "aws_iam_role" "cne_controller" {
   name        = local.effective_role_name
-  description = "IRSA role for F5 CNE controller — assumed by SA ${var.operator_namespace}/${var.cne_controller_sa_name} on cluster ${var.eks_cluster_name}"
+  description = "IRSA role for F5 CNE controller - assumed by SA ${var.operator_namespace}/${var.cne_controller_sa_name} on cluster ${var.eks_cluster_name}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
