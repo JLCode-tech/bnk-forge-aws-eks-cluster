@@ -42,12 +42,14 @@ UPSTREAM_PATHS=(
   "modules/cert-manager"
   "modules/bnk-cert-issuer"
   "modules/install-multus"
+  "modules/install-hugepages"
 )
 LOCAL_NAMES=(
   "eks-cluster-install-bnk-prereqs"
   "eks-cluster-install-cert-manager"
   "eks-cluster-install-cert-issuer"
   "eks-cluster-install-multus"
+  "eks-cluster-install-hugepages"
 )
 # NOTE: eks-cluster-cneinstance-ready-gate and eks-cluster-license-activation-gate
 # are cloud-specific gate modules native to THIS repo (not from catalog-shared).
