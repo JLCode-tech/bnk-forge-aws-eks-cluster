@@ -299,6 +299,28 @@
         ],
         "jwt_token": "${jwt_token}"
       }
+    },
+    {
+      "id": "ready-gate",
+      "name": "CNEInstance Readiness Gate",
+      "module": "modules/eks-cluster-cneinstance-ready-gate",
+      "version": "0.1.0-alpha",
+      "depends_on": [
+        "cneinstall"
+      ],
+      "inputs": {}
+    },
+    {
+      "id": "license-gate",
+      "name": "BNK License Activation Gate",
+      "module": "modules/eks-cluster-license-activation-gate",
+      "version": "0.1.0-alpha",
+      "depends_on": [
+        "ready-gate"
+      ],
+      "inputs": {
+        "jwt_token": "${jwt_token}"
+      }
     }
   ]
 }

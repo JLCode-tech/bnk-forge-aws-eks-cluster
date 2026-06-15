@@ -48,12 +48,7 @@ output "effective_tmm_replicas" {
   value       = local.effective_tmm_replicas
 }
 
-output "cneinstance_ready" {
-  description = "Gate output — the readiness gate's null_resource id, produced ONLY after the operator reported the CNEInstance functional (F5TmmAvailable && CNEControllerAvailable, or the status.state Ready/Running fallback). NOT a literal true: if the operator never reports ready, the readiness gate dumps pod diagnostics and fails the apply. Downstream modules (License) should depend on this."
-  value       = module.ready_gate.cneinstance_ready
-}
-
-output "license_active" {
-  description = "Gate output — the license-activation-gate's null_resource id, produced ONLY after the License CR was applied AND the operator reported .status.state == \"Active\". NOT a literal true: if the license never activates, the gate dumps pod diagnostics and fails the apply. Closes the D-017 licensing-success gap for the BNK blueprint."
-  value       = module.license_activation_gate.license_active
-}
+# NOTE: cneinstance_ready and license_active are no longer re-exported here.
+# The readiness gate and license-activation gate are now standalone chain modules
+# (eks-cluster-cneinstance-ready-gate / eks-cluster-license-activation-gate) that
+# export their own cneinstance_ready / license_active outputs. See #322/#323.

@@ -265,20 +265,6 @@
         "description": "IAM role ARN assumed by the CNE controller via IRSA.",
         "used_by": [],
         "sensitive": false
-      },
-      {
-        "name": "cneinstance_ready",
-        "type": "string",
-        "description": "Gate output — the readiness gate's null_resource id, produced only after the operator reported the CNEInstance functional. Not a literal true.",
-        "used_by": ["modules/eks-cluster-license-activation-gate"],
-        "sensitive": false
-      },
-      {
-        "name": "license_active",
-        "type": "string",
-        "description": "Gate output — the license-activation-gate's null_resource id, produced only after the License CR was applied and the operator reported .status.state == Active. Not a literal true.",
-        "used_by": [],
-        "sensitive": false
       }
     ]
   },

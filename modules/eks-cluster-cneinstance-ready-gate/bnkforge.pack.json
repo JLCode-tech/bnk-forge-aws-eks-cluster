@@ -24,7 +24,12 @@
     }
   },
   "dependencies": {
-    "required": [],
+    "required": [
+      {
+        "module": "modules/eks-cluster-cneinstall",
+        "reason": "Gates the CNEInstance this module creates; provides cneinstance_namespace and cneinstance_name."
+      }
+    ],
     "optional": []
   },
   "inputs": {
@@ -32,14 +37,18 @@
       {
         "name": "instance_namespace",
         "type": "string",
-        "description": "Namespace where the CNEInstance CR lives (forge EKS: operator_namespace, default f5-operator).",
-        "source": "user"
+        "description": "Namespace where the CNEInstance CR lives. Wired from cneinstall.cneinstance_namespace.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-cneinstall",
+        "from_output": "cneinstance_namespace"
       },
       {
         "name": "instance_name",
         "type": "string",
-        "description": "Name of the CNEInstance CR to poll.",
-        "source": "user"
+        "description": "Name of the CNEInstance CR to poll. Wired from cneinstall.cneinstance_name.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-cneinstall",
+        "from_output": "cneinstance_name"
       }
     ],
     "optional": [

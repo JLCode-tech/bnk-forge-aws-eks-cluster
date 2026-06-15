@@ -311,11 +311,6 @@
         "name": "effective_tmm_replicas",
         "type": "number",
         "description": "The tmm_replicas value actually applied. Equals user override if set, otherwise min(AZ count, worker node count)."
-      },
-      {
-        "name": "cneinstance_ready",
-        "type": "boolean",
-        "description": "Gate output — true once IRSA wiring (annotate + rollout-restart) is complete."
       }
     ]
   }
