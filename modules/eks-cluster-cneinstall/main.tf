@@ -234,8 +234,9 @@ MANIFEST
   }
 
   provisioner "local-exec" {
-    when    = destroy
-    command = "kubectl --kubeconfig ${self.triggers.kubeconfig_file} -n ${self.triggers.namespace} delete configmap cloud-network-mapping --ignore-not-found"
+    when       = destroy
+    on_failure = continue
+    command    = "kubectl --kubeconfig ${self.triggers.kubeconfig_file} -n ${self.triggers.namespace} delete configmap cloud-network-mapping --ignore-not-found"
   }
 }
 
@@ -267,8 +268,9 @@ MANIFEST
   }
 
   provisioner "local-exec" {
-    when    = destroy
-    command = "kubectl --kubeconfig ${self.triggers.kubeconfig_file} -n ${self.triggers.namespace} delete cneinstance ${self.triggers.name} --ignore-not-found"
+    when       = destroy
+    on_failure = continue
+    command    = "kubectl --kubeconfig ${self.triggers.kubeconfig_file} -n ${self.triggers.namespace} delete cneinstance ${self.triggers.name} --ignore-not-found"
   }
 }
 
@@ -301,8 +303,9 @@ MANIFEST
   }
 
   provisioner "local-exec" {
-    when    = destroy
-    command = "kubectl --kubeconfig ${self.triggers.kubeconfig_file} -n ${self.triggers.namespace} delete f5-bnkgateway ${self.triggers.name} --ignore-not-found"
+    when       = destroy
+    on_failure = continue
+    command    = "kubectl --kubeconfig ${self.triggers.kubeconfig_file} -n ${self.triggers.namespace} delete f5-bnkgateway ${self.triggers.name} --ignore-not-found"
   }
 }
 
@@ -462,8 +465,9 @@ resource "null_resource" "annotate_and_restart" {
   }
 
   provisioner "local-exec" {
-    when    = destroy
-    command = <<-EOT
+    when       = destroy
+    on_failure = continue
+    command    = <<-EOT
       kubectl --kubeconfig ${self.triggers.kubeconfig_file} \
         -n ${split("/", self.triggers.sa)[0]} \
         annotate sa ${split("/", self.triggers.sa)[1]} \
