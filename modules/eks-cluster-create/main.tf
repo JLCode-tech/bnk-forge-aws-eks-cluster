@@ -174,6 +174,34 @@ module "eks" {
       iam_role_additional_policies = {
         AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
       }
+
+      # F13: the aws-ebs-csi-driver addon runs WITHOUT IRSA and falls back to the
+      # node instance role via IMDS. EKS managed nodes default to IMDSv2 with
+      # http_put_response_hop_limit = 1, which blocks pods (one hop away) from
+      # reaching IMDS -> the ebs-csi-controller CrashLoops "no EC2 IMDS role found"
+      # and the addon never reaches ACTIVE (cluster-create apply hangs). Hop-limit 2
+      # lets the controller pod read the node role. (Alternative: give the addon IRSA.)
+      metadata_options = {
+        http_endpoint               = "enabled"
+        http_tokens                 = "required"
+        http_put_response_hop_limit = 2
+      }
+    }
+  }
+
+  # F18: the F5 BNK validation webhook (f5-validation-svc) listens on 3340 inside
+  # the cne-controller pod. The EKS control plane must reach it to admit F5SPKVlan /
+  # CNEInstance CRs (failurePolicy=Fail). The terraform-aws-eks node security group
+  # only opens the standard webhook ports (443/4443/6443/8443/9443) from the cluster
+  # SG, so 3340 times out. Open it explicitly.
+  node_security_group_additional_rules = {
+    f5_validation_webhook = {
+      description                   = "F5 BNK validation webhook (f5-validation-svc) from the EKS control plane"
+      protocol                      = "tcp"
+      from_port                     = 3340
+      to_port                       = 3340
+      type                          = "ingress"
+      source_cluster_security_group = true
     }
   }
 
