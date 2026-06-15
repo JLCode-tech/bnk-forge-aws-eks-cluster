@@ -142,11 +142,20 @@
       {
         "name": "operator_namespace",
         "type": "string",
-        "description": "Namespace where CNEInstance CR is created (also where FLO + CNE controller live).",
-        "default": "f5-operator",
+        "description": "Operator namespace — FLO, License CR, OTEL/CWC. Gold-standard split: f5-cne-core. This module applies no resources here (kept for documentation + dependency wiring).",
+        "default": "f5-cne-core",
         "source": "module",
         "from_module": "modules/eks-cluster-install-bnk-prereqs",
         "from_output": "operator_namespace"
+      },
+      {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "Instance namespace — CNEInstance CR, cloud-network CM, NADs, IRSA SA, FLO-deployed CNE controller. Gold-standard split: f5-cne-system (awsbnkctl bnkconst.InstanceNamespace).",
+        "default": "f5-cne-system",
+        "source": "module",
+        "from_module": "modules/eks-cluster-install-bnk-prereqs",
+        "from_output": "instance_namespace"
       },
       {
         "name": "far_secret_name",

@@ -78,8 +78,8 @@
       {
         "name": "instance_namespace",
         "type": "string",
-        "description": "Namespace where CNEInstance and OTEL certificates are created",
-        "default": "f5-operator",
+        "description": "Operator namespace where OTEL certificates are created (gold-standard: f5-cne-core). The CNEInstance itself lives in f5-cne-system; OTEL certs stay in the operator namespace.",
+        "default": "f5-cne-core",
         "source": "module",
         "from_module": "modules/eks-cluster-install-bnk-prereqs",
         "from_output": "operator_namespace"

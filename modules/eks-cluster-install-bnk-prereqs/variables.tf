@@ -37,9 +37,9 @@ variable "cne_pull_secret" {
 # =============================================================================
 
 variable "operator_namespace" {
-  description = "Namespace for FLO and ALL BNK components (CNEInstance deploys everything here)"
+  description = "Operator namespace — FLO (lifecycle operator), License CR, OTEL/CWC. Gold-standard split: f5-cne-core (awsbnkctl OperatorNamespace). The CNEInstance + CNE controller live in instance_namespace, NOT here."
   type        = string
-  default     = "f5-operator"
+  default     = "f5-cne-core"
 }
 
 variable "utils_namespace" {
@@ -55,9 +55,9 @@ variable "gateway_namespace" {
 }
 
 variable "instance_namespace" {
-  description = "Namespace where CNEInstance will be created (e.g. f5-bnk for DPU mode). When set and different from operator_namespace, creates an additional namespace + far-secret here. Leave empty to skip."
+  description = "Instance namespace — CNEInstance CR, cloud-network CM, NADs, IRSA SA, and the FLO-deployed CNE controller live here. Gold-standard split: f5-cne-system (awsbnkctl bnkconst.InstanceNamespace). When set and different from operator_namespace, creates this namespace + a far-secret here. Set empty to collapse onto operator_namespace (legacy single-namespace mode)."
   type        = string
-  default     = ""
+  default     = "f5-cne-system"
 }
 
 # =============================================================================

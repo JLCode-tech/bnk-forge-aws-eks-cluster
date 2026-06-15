@@ -123,9 +123,9 @@ variable "helm_timeout" {
 # with fully managed, auto-rotating certificates.
 
 variable "bnk_namespace" {
-  description = "Namespace where BNK components are deployed (OTEL certs are created here — must match CNEInstance namespace)"
+  description = "Operator namespace where OTEL certificates are created (gold-standard: f5-cne-core, matches awsbnkctl phase15). Under the namespace split this is the operator namespace, NOT the CNEInstance/instance namespace (f5-cne-system)."
   type        = string
-  default     = "f5-operator"
+  default     = "f5-cne-core"
 
   validation {
     condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", var.bnk_namespace))

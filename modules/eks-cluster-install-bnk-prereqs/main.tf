@@ -2,7 +2,8 @@
 # BNK Prerequisites — Namespaces + FAR Secrets + Manifest Download
 #
 # This module is the FIRST module in the BNK stack. It:
-# 1. Creates required namespaces (f5-operator, f5-utils, gateway-ns)
+# 1. Creates required namespaces — operator (f5-cne-core), instance (f5-cne-system,
+#    when distinct), utils (f5-utils), gateway (bnk-gw)
 # 2. Creates FAR image pull secrets from cne_pull_secret (project secret)
 # 3. Downloads BNK manifest from repo.f5.com
 # 4. Parses component versions (FLO version, cert-manager version, etc.)
@@ -219,7 +220,7 @@ resource "kubernetes_namespace_v1" "operator" {
   metadata {
     name = var.operator_namespace
     labels = {
-      "app.kubernetes.io/name"       = "f5-operator"
+      "app.kubernetes.io/name"       = var.operator_namespace
       "app.kubernetes.io/component"  = "bnk-operators"
       "app.kubernetes.io/managed-by" = "terraform"
       "f5.com/product"               = "bnk"

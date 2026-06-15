@@ -44,8 +44,15 @@
       {
         "name": "operator_namespace",
         "type": "string",
-        "description": "Namespace for FLO and all BNK components",
-        "default": "f5-operator",
+        "description": "Operator namespace — FLO, License CR, OTEL/CWC. Gold-standard split: f5-cne-core.",
+        "default": "f5-cne-core",
+        "source": "user"
+      },
+      {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "Instance namespace — CNEInstance CR, cloud-network CM, NADs, IRSA SA, CNE controller. Gold-standard split: f5-cne-system. Empty collapses onto operator_namespace.",
+        "default": "f5-cne-system",
         "source": "user"
       },
       {
@@ -83,11 +90,20 @@
       {
         "name": "operator_namespace",
         "type": "string",
-        "description": "Operator namespace name (FLO + all BNK components)",
+        "description": "Operator namespace name (FLO, License CR, OTEL/CWC). Gold-standard: f5-cne-core",
         "used_by": [
           "k8s/network-setup",
           "k8s/cert-manager",
           "bnk/flo",
+          "bnk/cneinstance"
+        ],
+        "sensitive": false
+      },
+      {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "Instance namespace name (CNEInstance CR, cloud-network CM, NADs, IRSA SA, CNE controller). Gold-standard: f5-cne-system",
+        "used_by": [
           "bnk/cneinstance"
         ],
         "sensitive": false

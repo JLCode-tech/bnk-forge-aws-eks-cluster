@@ -308,7 +308,10 @@
       "depends_on": [
         "cneinstall"
       ],
-      "inputs": {}
+      "inputs": {
+        "instance_namespace": "f5-cne-system",
+        "instance_name": "default-f5-cne-controller"
+      }
     },
     {
       "id": "license-gate",
@@ -319,7 +322,8 @@
         "ready-gate"
       ],
       "inputs": {
-        "jwt_token": "${jwt_token}"
+        "jwt_token": "${jwt_token}",
+        "license_namespace": "f5-cne-core"
       }
     }
   ]

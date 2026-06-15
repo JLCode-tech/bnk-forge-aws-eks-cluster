@@ -4,8 +4,8 @@ output "cneinstance_name" {
 }
 
 output "cneinstance_namespace" {
-  description = "Namespace where the CNEInstance CR lives."
-  value       = var.operator_namespace
+  description = "Namespace where the CNEInstance CR lives (gold-standard instance namespace, f5-cne-system)."
+  value       = var.instance_namespace
 }
 
 output "cne_controller_role_arn" {

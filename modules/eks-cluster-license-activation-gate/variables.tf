@@ -24,7 +24,7 @@ variable "kubeconfig_file" {
 # =============================================================================
 
 variable "license_namespace" {
-  description = "Namespace the License CR is applied into. On the forge EKS module this is var.operator_namespace (default f5-operator) — NOT awsbnkctl's f5-cne-core. The license controller (FLO) runs here."
+  description = "Namespace the License CR is applied into — where FLO (the license controller) runs. The aws-eks-bnk23-traffic blueprint now adopts the gold-standard split and passes f5-cne-core (matches awsbnkctl OperatorNamespace / phase23)."
   type        = string
 }
 

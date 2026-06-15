@@ -24,7 +24,7 @@ variable "kubeconfig_file" {
 # =============================================================================
 
 variable "instance_namespace" {
-  description = "Namespace where the CNEInstance CR lives. On the forge EKS module this is var.operator_namespace (default f5-operator) — NOT awsbnkctl's f5-cne-system."
+  description = "Namespace where the CNEInstance CR lives. The aws-eks-bnk23-traffic blueprint now adopts the gold-standard split and passes f5-cne-system (matches awsbnkctl bnkconst.InstanceNamespace)."
   type        = string
 }
 

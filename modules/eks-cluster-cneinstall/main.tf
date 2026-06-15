@@ -174,7 +174,7 @@ locals {
 
   cneinstance_manifest = templatefile("${path.module}/manifests/cneinstance.yaml.tftpl", {
     instance_name       = var.instance_name
-    instance_namespace  = var.operator_namespace
+    instance_namespace  = var.instance_namespace
     manifest_version    = var.manifest_version
     cluster_issuer_name = var.cluster_issuer_name
     deployment_size     = var.deployment_size
@@ -186,12 +186,12 @@ locals {
   })
 
   cloud_network_mapping_manifest = templatefile("${path.module}/manifests/cloud-network-mapping.yaml.tftpl", {
-    instance_namespace = var.operator_namespace
+    instance_namespace = var.instance_namespace
     az_subnet_mappings = var.cloud_az_subnet_mappings
   })
 
   bnk_gateway_manifest = templatefile("${path.module}/manifests/bnk-gateway.yaml.tftpl", {
-    instance_namespace        = var.operator_namespace
+    instance_namespace        = var.instance_namespace
     bnk_gateway_name          = var.bnk_gateway_name
     default_listener_networks = local.bnk_gateway_listener_networks
   })
@@ -221,7 +221,7 @@ resource "null_resource" "cloud_network_mapping" {
   triggers = {
     manifest_hash   = sha256(local.cloud_network_mapping_manifest)
     kubeconfig_file = local_sensitive_file.kubeconfig.filename
-    namespace       = var.operator_namespace
+    namespace       = var.instance_namespace
   }
 
   provisioner "local-exec" {
@@ -247,7 +247,7 @@ resource "null_resource" "cneinstance" {
   triggers = {
     manifest_hash   = sha256(local.cneinstance_manifest)
     kubeconfig_file = local_sensitive_file.kubeconfig.filename
-    namespace       = var.operator_namespace
+    namespace       = var.instance_namespace
     name            = var.instance_name
     flo_ready       = tostring(var.flo_ready)
     crds_installed  = tostring(var.crds_installed)
@@ -259,7 +259,7 @@ resource "null_resource" "cneinstance" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "=== Applying CNEInstance CR ${var.instance_name} in ${var.operator_namespace} ==="
+      echo "=== Applying CNEInstance CR ${var.instance_name} in ${var.instance_namespace} ==="
       cat <<'MANIFEST' | ${local.kubectl} apply -f -
 ${local.cneinstance_manifest}
 MANIFEST
@@ -283,7 +283,7 @@ resource "null_resource" "bnk_gateway" {
   triggers = {
     manifest_hash   = sha256(local.bnk_gateway_manifest)
     kubeconfig_file = local_sensitive_file.kubeconfig.filename
-    namespace       = var.operator_namespace
+    namespace       = var.instance_namespace
     name            = var.bnk_gateway_name
   }
 
@@ -335,7 +335,7 @@ resource "aws_iam_policy" "cne_controller_vip" {
 
 resource "aws_iam_role" "cne_controller" {
   name        = local.effective_role_name
-  description = "IRSA role for F5 CNE controller - assumed by SA ${var.operator_namespace}/${var.cne_controller_sa_name} on cluster ${var.eks_cluster_name}"
+  description = "IRSA role for F5 CNE controller - assumed by SA ${var.instance_namespace}/${var.cne_controller_sa_name} on cluster ${var.eks_cluster_name}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -347,7 +347,7 @@ resource "aws_iam_role" "cne_controller" {
         Condition = {
           StringEquals = {
             "${local.oidc_host_path}:aud" = "sts.amazonaws.com"
-            "${local.oidc_host_path}:sub" = "system:serviceaccount:${var.operator_namespace}:${var.cne_controller_sa_name}"
+            "${local.oidc_host_path}:sub" = "system:serviceaccount:${var.instance_namespace}:${var.cne_controller_sa_name}"
           }
         }
       }
@@ -355,7 +355,7 @@ resource "aws_iam_role" "cne_controller" {
   })
 
   tags = merge(local.common_tags, {
-    "k8s-namespace"      = var.operator_namespace
+    "k8s-namespace"      = var.instance_namespace
     "k8s-serviceaccount" = var.cne_controller_sa_name
   })
 }
@@ -381,8 +381,8 @@ resource "aws_iam_role_policy_attachment" "extra" {
 resource "null_resource" "annotate_and_restart" {
   triggers = {
     role_arn        = aws_iam_role.cne_controller.arn
-    sa              = "${var.operator_namespace}/${var.cne_controller_sa_name}"
-    deployment      = "${var.operator_namespace}/${var.cne_controller_deployment_name}"
+    sa              = "${var.instance_namespace}/${var.cne_controller_sa_name}"
+    deployment      = "${var.instance_namespace}/${var.cne_controller_deployment_name}"
     kubeconfig_file = local_sensitive_file.kubeconfig.filename
   }
 
@@ -395,7 +395,7 @@ resource "null_resource" "annotate_and_restart" {
     command = <<-EOT
       set -e
       KUBECTL="${local.kubectl}"
-      NS="${var.operator_namespace}"
+      NS="${var.instance_namespace}"
       SA="${var.cne_controller_sa_name}"
       ROLE_ARN="${aws_iam_role.cne_controller.arn}"
       DEPLOY="${var.cne_controller_deployment_name}"

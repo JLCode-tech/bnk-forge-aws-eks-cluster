@@ -100,9 +100,9 @@
       {
         "name": "nad_namespace",
         "type": "string",
-        "description": "Namespace where the NADs are created. Default 'default' matches the F5 install guide.",
+        "description": "Namespace where the NADs are created. MUST match the CNEInstance namespace (the CNE reconciler resolves NADs by name within it). Gold-standard split: f5-cne-system.",
         "source": "user",
-        "default": "default"
+        "default": "f5-cne-system"
       },
       {
         "name": "nad_external_name",

@@ -6,8 +6,13 @@
 # =============================================================================
 
 output "operator_namespace" {
-  description = "Name of the operator namespace (FLO + all BNK components)"
+  description = "Name of the operator namespace (FLO, License CR, OTEL/CWC). Gold-standard: f5-cne-core."
   value       = kubernetes_namespace_v1.operator.metadata[0].name
+}
+
+output "instance_namespace" {
+  description = "Name of the instance namespace (CNEInstance CR, cloud-network CM, NADs, IRSA SA, CNE controller). Gold-standard: f5-cne-system. Falls back to operator_namespace when instance_namespace is empty (legacy single-namespace mode)."
+  value       = var.instance_namespace != "" ? var.instance_namespace : var.operator_namespace
 }
 
 output "utils_namespace" {

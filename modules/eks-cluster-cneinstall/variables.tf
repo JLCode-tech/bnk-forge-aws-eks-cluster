@@ -61,9 +61,15 @@ variable "cluster_oidc_issuer_url" {
 # =============================================================================
 
 variable "operator_namespace" {
-  description = "Namespace where FLO and CNE controller live. CNEInstance CR is also applied here."
+  description = "Operator namespace — where FLO (the lifecycle operator), the License CR, and OTEL/CWC live. Gold-standard split: f5-cne-core. Auto-wired from bnk-prereqs.operator_namespace. NOTE: this module no longer applies any resources here (the CNEInstance, cloud-network CM, NADs, IRSA SA and CNE controller all live in instance_namespace); kept for documentation + dependency wiring."
   type        = string
-  default     = "f5-operator"
+  default     = "f5-cne-core"
+}
+
+variable "instance_namespace" {
+  description = "Instance namespace — where the CNEInstance CR, cloud-network-mapping ConfigMap, NADs, IRSA ServiceAccount and the FLO-deployed CNE controller live. Gold-standard split: f5-cne-system (matches awsbnkctl bnkconst.InstanceNamespace). FLO co-locates the CNE controller with the CNEInstance CR, so IRSA SA annotation + rollout target this namespace. Auto-wired from bnk-prereqs.instance_namespace."
+  type        = string
+  default     = "f5-cne-system"
 }
 
 variable "utils_namespace" {

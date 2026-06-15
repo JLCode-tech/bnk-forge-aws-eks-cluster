@@ -33,7 +33,7 @@
       {
         "name": "license_namespace",
         "type": "string",
-        "description": "Namespace the License CR is applied into (forge EKS: operator_namespace, default f5-operator).",
+        "description": "Namespace the License CR is applied into — where FLO runs (gold-standard: f5-cne-core; aws-eks-bnk23-traffic blueprint passes this).",
         "source": "user"
       },
       {

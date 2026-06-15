@@ -63,9 +63,9 @@ variable "multus_ready" {
 # =============================================================================
 
 variable "nad_namespace" {
-  description = "Namespace where the NADs are created. F5 install guide uses 'default'; CNEInstance also lives in 'default' by convention, so the NetworkAttachmentDefinition lookup is unambiguous."
+  description = "Namespace where the NADs are created. MUST match the namespace where the CNEInstance CR lives, because the CNE reconciler resolves NetworkAttachmentDefinitions by name within that namespace. Gold-standard split: f5-cne-system (awsbnkctl bnkconst.InstanceNamespace) — same as cneinstall's instance_namespace. A mismatch stalls the CNEInstance with 'Expected NetworkAttachmentDefinitions not present'."
   type        = string
-  default     = "default"
+  default     = "f5-cne-system"
 }
 
 variable "nad_external_name" {

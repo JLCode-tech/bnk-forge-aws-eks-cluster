@@ -49,8 +49,8 @@
       {
         "name": "operator_namespace",
         "type": "string",
-        "description": "Namespace for FLO and all BNK components (CNEInstance deploys everything here).",
-        "default": "f5-operator",
+        "description": "Operator namespace — FLO, License CR, OTEL/CWC. Gold-standard split: f5-cne-core. CNEInstance + CNE controller live in instance_namespace.",
+        "default": "f5-cne-core",
         "source": "user"
       },
       {
@@ -70,8 +70,8 @@
       {
         "name": "instance_namespace",
         "type": "string",
-        "description": "Namespace where CNEInstance will be created (e.g. f5-bnk for DPU mode). When set and different from operator_namespace, creates an additional namespace + far-secret here. Leave empty to skip.",
-        "default": "",
+        "description": "Instance namespace — CNEInstance CR, cloud-network CM, NADs, IRSA SA, CNE controller. Gold-standard split: f5-cne-system (awsbnkctl bnkconst.InstanceNamespace). When set and different from operator_namespace, creates this namespace + far-secret here. Empty collapses onto operator_namespace (legacy single-namespace mode).",
+        "default": "f5-cne-system",
         "source": "user"
       },
       {
@@ -95,7 +95,12 @@
       {
         "name": "operator_namespace",
         "type": "string",
-        "description": "Operator namespace name (FLO + all BNK components)."
+        "description": "Operator namespace name (FLO, License CR, OTEL/CWC). Gold-standard: f5-cne-core."
+      },
+      {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "Instance namespace name (CNEInstance CR, cloud-network CM, NADs, IRSA SA, CNE controller). Gold-standard: f5-cne-system."
       },
       {
         "name": "utils_namespace",
