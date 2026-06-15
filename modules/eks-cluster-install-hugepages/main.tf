@@ -34,6 +34,38 @@ resource "local_sensitive_file" "kubeconfig" {
 locals {
   kubectl            = "kubectl --kubeconfig ${local_sensitive_file.kubeconfig.filename}"
   hugepages_manifest = "${path.module}/manifests/hugepages-ds.yaml"
+  gp3_sc_manifest    = "${path.module}/manifests/gp3-storageclass.yaml"
+}
+
+# F17: gp3 (EBS CSI) default StorageClass. BNK dSSM PVCs request "gp3" but EKS
+# only ships in-tree "gp2" -> PVCs Pending, dSSM never reaches quorum. Applied
+# here (post-cluster k8s bootstrap, alongside hugepages) so the SC exists before
+# the CNEInstance creates dSSM PVCs. Independent of install_hugepages.
+resource "null_resource" "gp3_storageclass" {
+  triggers = {
+    manifest        = filemd5(local.gp3_sc_manifest)
+    kubeconfig_file = local_sensitive_file.kubeconfig.filename
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      echo "[install-hugepages] applying gp3 EBS-CSI default StorageClass"
+      ${local.kubectl} apply -f "${local.gp3_sc_manifest}"
+    EOT
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["bash", "-c"]
+    on_failure  = continue
+    command     = <<-EOT
+      echo "[install-hugepages] removing gp3 StorageClass"
+      kubectl --kubeconfig "${self.triggers.kubeconfig_file}" delete \
+        -f "${path.module}/manifests/gp3-storageclass.yaml" --ignore-not-found || true
+    EOT
+  }
 }
 
 resource "null_resource" "hugepages_install" {

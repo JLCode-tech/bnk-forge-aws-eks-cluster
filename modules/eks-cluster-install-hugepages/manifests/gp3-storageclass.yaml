@@ -1,0 +1,20 @@
+# F17: default gp3 StorageClass backed by the EBS CSI driver (ebs.csi.aws.com,
+# the aws-ebs-csi-driver addon installed by cluster-create). BNK 2.3 dSSM PVCs
+# (data-f5-dssm-db-*, data-f5-dssm-sentinel-*) request StorageClass "gp3"; an EKS
+# cluster only ships the in-tree "gp2" by default, so without this the PVCs stay
+# Pending and dSSM never reaches quorum -> CNEInstance never Available. Marked
+# default so any unqualified PVC also binds. WaitForFirstConsumer places the
+# volume in the AZ where the consuming pod schedules.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+parameters:
+  type: gp3
+  encrypted: "true"
