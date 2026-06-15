@@ -144,7 +144,7 @@ locals {
   # bnk_gateway is traffic-plane (step-4): its F5BnkGateway CRD is absent until
   # the spkvlan/gatewayclass modules run. Gate behind an explicit opt-in so the
   # Active path (CNEInstance-ready + License-Active) doesn't fail on a missing CRD.
-  bnk_gateway_enabled          = var.enable_bnk_gateway && (local.vip_cidr_set || local.tmm_external_subnets_present)
+  bnk_gateway_enabled = var.enable_bnk_gateway && (local.vip_cidr_set || local.tmm_external_subnets_present)
 
   # Explicit override path: single entry from the user-supplied CIDR.
   explicit_listener_networks = local.vip_cidr_set ? [{
@@ -319,11 +319,33 @@ resource "aws_iam_policy" "cne_controller_vip" {
     Statement = [
       {
         Effect = "Allow"
+        # F19: match awsbnkctl's CneControllerVpcRead (phase18). The cne-controller
+        # needs the full VPC/ENI/route set to map SelfIPs to the cloud network and
+        # push Gateway VIP routes. With only Assign/Unassign/Describe{Instances,NICs}
+        # the controller's dataplane reconcile silently AccessDenies on
+        # DescribeSubnets/AvailabilityZones/RouteTables + CreateRoute, leaving the
+        # F5SPKVlan unprogrammed (MinSelfIPCount=0 -> TMM stuck standby).
         Action = [
+          "ec2:DescribeVpcs",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeRouteTables",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceTypes",
+          "ec2:DescribeTags",
+          "ec2:DescribeAvailabilityZones",
+          "ec2:CreateNetworkInterface",
+          "ec2:DeleteNetworkInterface",
+          "ec2:ModifyNetworkInterfaceAttribute",
           "ec2:AssignPrivateIpAddresses",
           "ec2:UnassignPrivateIpAddresses",
-          "ec2:DescribeInstances",
-          "ec2:DescribeNetworkInterfaces",
+          "ec2:AttachNetworkInterface",
+          "ec2:DetachNetworkInterface",
+          "ec2:CreateTags",
+          "ec2:CreateRoute",
+          "ec2:DeleteRoute",
+          "ec2:ReplaceRoute",
         ]
         Resource = "*"
       }
