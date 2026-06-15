@@ -296,6 +296,10 @@ resource "aws_eks_node_group" "hp" {
     app                = var.node_label_app
     "bnk-forge/role"   = "hp-tmm"
     "bnk-forge/module" = "eks-cluster-hp-nodes"
+    # F15: the vendored install-hugepages DaemonSet selects nodes by role=bnk
+    # (awsbnkctl convention). Without this label it matches 0 nodes and hugepages
+    # are never configured, so f5-tmm stays Pending (Insufficient hugepages-2Mi).
+    "role" = "bnk"
   }
 
   dynamic "taint" {
