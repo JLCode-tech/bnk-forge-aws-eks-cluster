@@ -18,7 +18,7 @@
   "icon": "Cloud",
   "color": "orange",
   "estimated_time": "40-60 minutes",
-  "estimated_cost": "AWS usage-based (cluster + 3\u00d7 m6i.4xlarge worker nodes + ~1\u00d7 m5n.large HP node per AZ + NAT)",
+  "estimated_cost": "AWS usage-based (cluster + 3\u00d7 m6i.4xlarge worker nodes + ~1\u00d7 c5n.xlarge HP node per AZ + NAT)",
   "difficulty": "intermediate",
   "maturity": "alpha",
   "tags": [
@@ -129,8 +129,8 @@
       {
         "name": "hp_instance_type",
         "type": "string",
-        "description": "EC2 instance type for HP TMM nodes (must support \u22653 ENIs: CNI + ens7 external + ens8 internal). Default m5n.large (Intel Xeon + 100Gbps ENA, 3 ENI limit). For higher TMM throughput: m5n.xlarge (4 ENIs) or c5n.xlarge.",
-        "default": "m5n.large",
+        "description": "EC2 instance type for HP TMM nodes (must support \u22653 ENIs: CNI + ens7 external + ens8 internal). Default c5n.xlarge (Intel Xeon + 100Gbps ENA, 4 ENIs, available in all major regions). Note: m5n family is not available in all regions (e.g. ap-southeast-2); prefer c5n.xlarge or m6i.xlarge for broad compatibility.",
+        "default": "c5n.xlarge",
         "order": 32
       },
       {

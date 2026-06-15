@@ -110,9 +110,9 @@ variable "tmm_internal_subnet_index_offset" {
 # =============================================================================
 
 variable "instance_type" {
-  description = "EC2 instance type for HP nodes. Default m5n.large (Intel Xeon + 100Gbps ENA + SR-IOV). For higher throughput: c5n.xlarge / m5n.xlarge / c6gn.xlarge. Note that 2 secondary ENIs are attached — the instance type must support at least 3 total ENIs (m5n.large supports 3, m5n.xlarge supports 4)."
+  description = "EC2 instance type for HP nodes. Default c5n.xlarge (Intel Xeon + 100Gbps ENA + SR-IOV, 4 ENIs, available in all major regions). For higher throughput: m5n.xlarge / m6in.xlarge. Note: m5n family is absent in some regions (e.g. ap-southeast-2) — use c5n.xlarge or m6i.xlarge for broad compatibility. The instance type must support at least 3 total ENIs (2 secondary ENIs are attached for TMM external + internal)."
   type        = string
-  default     = "m5n.large"
+  default     = "c5n.xlarge"
 }
 
 variable "node_count_per_az" {
