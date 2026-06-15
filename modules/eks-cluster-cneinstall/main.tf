@@ -185,9 +185,27 @@ locals {
     tmm_replicas        = local.effective_tmm_replicas
   })
 
+  # F18: the cloud-network-mapping ConfigMap must list, per AZ, the TMM data-plane
+  # (ext/int) subnets in addition to the mgmt/node subnet — the CNE controller reads
+  # it to map TMM SelfIPs to the right cloud subnet. Previously only the node subnets
+  # (var.cloud_az_subnet_mappings) were emitted, so the controller never learned the
+  # ens7/ens8 ENI subnets and the TMM dataplane never programmed. Merge the
+  # tag-discovered tmm-external + tmm-internal subnets (same discovery used for VIP
+  # listener networks) into each AZ entry, in awsbnkctl order: mgmt, external, internal.
+  cloud_network_az_subnet_mappings = [
+    for az_entry in var.cloud_az_subnet_mappings : {
+      name = az_entry.name
+      subnets = concat(
+        az_entry.subnets,
+        lookup(local.discovered_tmm_external_by_az_map, az_entry.name, []),
+        lookup(local.discovered_tmm_internal_by_az_map, az_entry.name, []),
+      )
+    }
+  ]
+
   cloud_network_mapping_manifest = templatefile("${path.module}/manifests/cloud-network-mapping.yaml.tftpl", {
     instance_namespace = var.instance_namespace
-    az_subnet_mappings = var.cloud_az_subnet_mappings
+    az_subnet_mappings = local.cloud_network_az_subnet_mappings
   })
 
   bnk_gateway_manifest = templatefile("${path.module}/manifests/bnk-gateway.yaml.tftpl", {
