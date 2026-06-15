@@ -2,7 +2,7 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-bnk23-traffic",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "name": "AWS EKS + BNK 2.3 Traffic-Ready (Opinionated)",
     "description": "Opinionated, one-shot greenfield deployment: provisions a new AWS EKS cluster with validated BNK 2.3 Small node sizing (m6i.4xlarge \u00d7 3 for dSSM quorum), adds a dedicated HP TMM node pool (dual secondary ENIs), installs the full BNK 2.3 platform chain, and gates on license activation \u2014 all with sensible production defaults locked in. Power users may override sizing/replicas; the minimal path requires only a cluster name \u2014 credentials and secrets are resolved from project context."
   },
@@ -129,8 +129,8 @@
       {
         "name": "hp_instance_type",
         "type": "string",
-        "description": "EC2 instance type for HP TMM nodes (must support \u22653 ENIs: CNI + ens7 external + ens8 internal). Default c5n.xlarge (Intel Xeon + 100Gbps ENA, 4 ENIs, available in all major regions). Note: m5n family is not available in all regions (e.g. ap-southeast-2); prefer c5n.xlarge or m6i.xlarge for broad compatibility.",
-        "default": "c5n.xlarge",
+        "description": "EC2 instance type for HP TMM nodes. Default c5n.4xlarge (16 vCPU) is the awsbnkctl gold-standard HP/TMM node (doctor: 'needs \u22653 c5n.4xlarge'); the live syd-tracer cluster uses it. The BNK 2.3 Small f5-tmm pod requests ~4.7 vCPU + 4Gi hugepages, which does NOT fit on c5n.xlarge (4 vCPU). Must support \u22653 ENIs (CNI + ens7 + ens8). m5n is unavailable in some regions (e.g. ap-southeast-2); c5n.4xlarge / m6i.4xlarge are broadly available.",
+        "default": "c5n.4xlarge",
         "order": 32
       },
       {
@@ -150,8 +150,8 @@
       {
         "name": "tmm_replicas",
         "type": "number",
-        "description": "TMM replicas. 0 = auto-derive from AZ \u00d7 HP node count.",
-        "default": 0,
+        "description": "TMM replicas. Default 1 \u2014 a demo/single-TMM deployment (matches awsbnkctl demo: one TMM in one AZ, simplest data-plane). Set 0 to auto-derive from AZ \u00d7 HP node count for a multi-TMM HA topology.",
+        "default": 1,
         "order": 41
       },
       {
@@ -227,7 +227,8 @@
       "version": "0.3.0-alpha",
       "depends_on": [
         "hp-nodes",
-        "install-multus"
+        "install-multus",
+        "bnk-prereqs"
       ],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
@@ -245,8 +246,7 @@
       "depends_on": [
         "cluster-create",
         "hp-nodes",
-        "install-multus",
-        "tmm-nads"
+        "install-multus"
       ],
       "inputs": {
         "cluster_name": "${eks_cluster_name}",
