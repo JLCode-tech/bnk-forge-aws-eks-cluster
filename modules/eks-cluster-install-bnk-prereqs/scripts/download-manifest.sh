@@ -110,10 +110,10 @@ else
 fi
 
 # Dynamically find the manifest YAML file
-MANIFEST_FILE=$(find "$MANIFEST_DIR" -name "*.yaml" -type f | grep -E "(manifest|bigip)" | head -n1)
+MANIFEST_FILE=$(find "$MANIFEST_DIR" -name "*manifest*.yaml" -type f | head -n1)
 if [ -z "$MANIFEST_FILE" ]; then
-    # Fallback: try any YAML file in the directory
-    MANIFEST_FILE=$(find "$MANIFEST_DIR" -name "*.yaml" -type f | head -n1)
+    # Fallback: try any YAML file in the directory, excluding Chart.yaml
+    MANIFEST_FILE=$(find "$MANIFEST_DIR" -name "*.yaml" -type f ! -name "Chart.yaml" | head -n1)
 fi
 
 # Verify manifest file exists
