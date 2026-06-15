@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "module": {
+    "name": "Install Hugepages DaemonSet",
+    "path": "modules/eks-cluster-install-hugepages",
+    "version": "0.1.0-alpha",
+    "category": "k8s",
+    "description": "Cloud-agnostic primitive: apply a hugepages-setup DaemonSet on BNK worker nodes (label role=bnk). Sets 2048 x 2Mi hugepages (4 GB) on each TMM node so kubelet advertises hugepages-2Mi capacity — required for F5 TMM to schedule. Matches awsbnkctl Phase 11b apply logic."
+  },
+  "deployment_pack": {
+    "engine": "opentofu",
+    "runner_profile": "opentofu-default",
+    "working_directory": ".",
+    "entrypoints": {
+      "module_root": "."
+    },
+    "lifecycle": {
+      "supports_init": true,
+      "supports_plan": true,
+      "supports_apply": true,
+      "supports_destroy": true,
+      "supports_refresh": true,
+      "supports_drift": true
+    }
+  },
+  "credentials": {
+    "required": [],
+    "optional": []
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "modules/eks-cluster-install-multus",
+        "reason": "Hugepages must be configured on BNK nodes before CNEInstance schedules TMM pods; Multus must be ready first so the node join is complete."
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [],
+    "optional": [
+      {
+        "name": "install_hugepages",
+        "type": "boolean",
+        "description": "Apply the hugepages-setup DaemonSet. Set false if hugepages are already configured on the cluster's BNK nodes.",
+        "source": "user",
+        "default": true
+      },
+      {
+        "name": "daemonset_rollout_timeout",
+        "type": "string",
+        "description": "kubectl rollout status timeout for the hugepages-setup DaemonSet to be Ready. Default 300s matches awsbnkctl Phase 11b hugepagesReadyTimeout.",
+        "source": "user",
+        "default": "300s"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "hugepages_installed",
+        "type": "boolean",
+        "description": "Whether the hugepages DaemonSet was applied by this module."
+      },
+      {
+        "name": "hugepages_ready",
+        "type": "boolean",
+        "description": "Gate output — true once the DaemonSet has rolled out on all role=bnk nodes. Downstream cneinstall/cneinstance modules depend on this."
+      }
+    ]
+  }
+}

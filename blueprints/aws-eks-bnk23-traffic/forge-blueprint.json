@@ -210,6 +210,17 @@
       "inputs": {}
     },
     {
+      "id": "install-hugepages",
+      "name": "Install Hugepages DaemonSet",
+      "module": "modules/eks-cluster-install-hugepages",
+      "version": "0.1.0-alpha",
+      "depends_on": [
+        "hp-nodes",
+        "install-multus"
+      ],
+      "inputs": {}
+    },
+    {
       "id": "tmm-nads",
       "name": "TMM NADs (ens7/ens8)",
       "module": "modules/eks-cluster-install-tmm-nads",
@@ -282,7 +293,8 @@
       "version": "1.1.0",
       "depends_on": [
         "flo",
-        "tmm-nads"
+        "tmm-nads",
+        "install-hugepages"
       ],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",

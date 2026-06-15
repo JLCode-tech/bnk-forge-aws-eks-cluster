@@ -149,6 +149,12 @@ module "eks" {
       before_compute       = true
       configuration_values = jsonencode({ env = { ENABLE_PREFIX_DELEGATION = "true", WARM_PREFIX_TARGET = "1", WARM_ENI_TARGET = "0" } })
     }
+    # EBS CSI driver — without it, dynamically-provisioned EBS PVCs never bind and
+    # the BNK runtime (dSSM, Observer, spk-cwc) stays Pending on its volumes.
+    # Installs AFTER compute (default) so nodes + the AmazonEBSCSIDriverPolicy on
+    # the node role (see eks_managed_node_groups.default below) are in place first.
+    # Uses node-role credentials (no IRSA needed) — matches awsbnkctl phase11b.
+    aws-ebs-csi-driver = {}
   }
 
   eks_managed_node_groups = {
@@ -160,6 +166,14 @@ module "eks" {
       min_size     = var.worker_count_per_az * local.az_count
       desired_size = var.worker_count_per_az * local.az_count
       max_size     = var.worker_count_per_az * local.az_count * 2
+
+      # The aws-ebs-csi-driver addon's controller runs on these worker nodes and
+      # uses the node instance role to call EC2 (CreateVolume/AttachVolume/...).
+      # AmazonEBSCSIDriverPolicy is the AWS-managed policy granting exactly that.
+      # Matches awsbnkctl phase11b (node-role credentials, no IRSA).
+      iam_role_additional_policies = {
+        AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+      }
     }
   }
 

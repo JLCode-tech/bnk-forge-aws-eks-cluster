@@ -1,0 +1,89 @@
+{
+  "module": {
+    "name": "Install Hugepages DaemonSet",
+    "path": "modules/eks-cluster-install-hugepages",
+    "version": "0.1.0-alpha",
+    "layer": "kubernetes",
+    "category": "k8s",
+    "description": "Cloud-agnostic primitive: apply a hugepages-setup DaemonSet on BNK worker nodes. Sets 2048 x 2Mi hugepages per node so kubelet advertises hugepages-2Mi capacity required by F5 TMM.",
+    "cloud_specific": false,
+    "supported_platforms": [
+      "any"
+    ]
+  },
+  "source": {
+    "kind": "official",
+    "channel": "release/2.3"
+  },
+  "execution": {
+    "engine": "opentofu",
+    "deploy_models": [
+      "kubernetes_manifest"
+    ]
+  },
+  "contract": {
+    "metadata_version": "module-metadata/v2alpha1"
+  },
+  "dependencies": {
+    "required": [
+      {
+        "module": "modules/eks-cluster-install-multus",
+        "reason": "Node join must be complete before hugepages DaemonSet runs."
+      }
+    ],
+    "optional": []
+  },
+  "inputs": {
+    "required": [],
+    "optional": [
+      {
+        "name": "install_hugepages",
+        "type": "boolean",
+        "description": "Apply the hugepages-setup DaemonSet.",
+        "default": true,
+        "source": "user"
+      },
+      {
+        "name": "daemonset_rollout_timeout",
+        "type": "string",
+        "description": "kubectl rollout timeout for hugepages DaemonSet.",
+        "default": "300s",
+        "source": "user"
+      }
+    ]
+  },
+  "outputs": {
+    "key_outputs": [
+      {
+        "name": "hugepages_ready",
+        "type": "boolean",
+        "description": "Gate output: DS rolled out on all role=bnk nodes.",
+        "used_by": [
+          "cneinstall",
+          "install-spkvlan-gatewayclass"
+        ],
+        "sensitive": false
+      },
+      {
+        "name": "hugepages_installed",
+        "type": "boolean",
+        "description": "Echoed value of install_hugepages.",
+        "used_by": [],
+        "sensitive": false
+      }
+    ]
+  },
+  "providers": {
+    "required": [
+      "local",
+      "null"
+    ],
+    "optional": []
+  },
+  "deployment": {
+    "order": 25,
+    "estimated_time": "5 minutes",
+    "requires_user_input": false,
+    "sensitive_inputs": []
+  }
+}
