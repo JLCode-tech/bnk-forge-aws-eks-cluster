@@ -13,7 +13,7 @@ spec:
     gatewayAPI: true
     type: BNK
   manifestVersion: "${manifest_version}"
-  wholeCluster: false
+  wholeCluster: true
   telemetry:
     loggingSubsystem:
       enabled: true
@@ -37,24 +37,21 @@ spec:
 %{ endfor ~}
   dynamicRouting:
     enabled: true
+  # Fields below match the proven-Active awsbnkctl bnk-demo CNEInstance exactly
+  # (D-033 fix): wholeCluster + firewallACL + intelligentLB on, coreCollection
+  # off, no watchNamespaces/coremon/envDiscovery overrides. Our earlier values
+  # reached control-plane-Active but TMM stayed standby; aligning to the working
+  # demo is what gets F5TmmAvailable=True.
   firewallACL:
-    enabled: false
+    enabled: true
   pseudoCNI:
     enabled: true
   coreCollection:
+    enabled: false
+  intelligentLB:
     enabled: true
-  watchNamespaces:
-%{ for ns in watch_namespaces ~}
-    - "${ns}"
-%{ endfor ~}
   tmmReplicas: ${tmm_replicas}
   advanced:
-    coremon:
-      hostPath: true
-    envDiscovery:
-      enabled: true
-      stopOnFail: true
-      runAfterSuccess: true
     cneController:
       # Host-device cloud binding (awsbnkctl phase22 render): tells the
       # cne-controller this is an AWS host-device deploy and how to find +
