@@ -2,9 +2,9 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-bnk23-traffic",
-    "version": "0.5.0",
-    "name": "AWS EKS + BNK 2.3 Traffic-Ready (Opinionated)",
-    "description": "Opinionated, one-shot greenfield deployment: provisions a new AWS EKS cluster with validated BNK 2.3 Small node sizing (m6i.4xlarge \u00d7 3 for dSSM quorum), adds a dedicated HP TMM node pool (dual secondary ENIs), installs the full BNK 2.3 platform chain, and gates on license activation \u2014 all with sensible production defaults locked in. Power users may override sizing/replicas; the minimal path requires only a cluster name \u2014 credentials and secrets are resolved from project context."
+    "version": "0.5.1",
+    "name": "AWS EKS + BNK 2.3 Traffic-Ready",
+    "description": "One-field deploy: provisions a new AWS EKS cluster and installs the full BNK 2.3 platform (HP TMM node pool, Multus, hugepages, cert-manager, FLO, CNEInstance, license gate). Only the cluster name is required; all credentials and operational settings are resolved automatically."
   },
   "bnk_version": "2.3",
   "category": "infra",
@@ -18,7 +18,7 @@
   "icon": "Cloud",
   "color": "orange",
   "estimated_time": "40-60 minutes",
-  "estimated_cost": "AWS usage-based (cluster + 3\u00d7 m6i.4xlarge worker nodes + ~1\u00d7 c5n.xlarge HP node per AZ + NAT)",
+  "estimated_cost": "AWS usage-based (EKS control plane + 3× m6i.4xlarge workers + 1× c5n.4xlarge HP node + NAT gateway)",
   "difficulty": "intermediate",
   "maturity": "alpha",
   "tags": [
@@ -37,17 +37,17 @@
     {
       "type": "credential_template",
       "name": "aws_credentials",
-      "description": "AWS credential template (any of Forge's three auth methods). Principal needs VPC + EKS + IAM create privileges."
+      "description": "AWS credentials with VPC, EKS, and IAM create privileges."
     },
     {
       "type": "project_secret",
       "name": "cne_pull_secret",
-      "description": "F5 FAR registry credentials."
+      "description": "F5 FAR registry pull secret."
     },
     {
       "type": "project_secret",
       "name": "jwt_token",
-      "description": "F5 BNK License JWT."
+      "description": "F5 BNK license JWT."
     }
   ],
   "inputs": {
@@ -55,7 +55,7 @@
       {
         "name": "eks_cluster_name",
         "type": "string",
-        "description": "Name for the new EKS cluster.",
+        "description": "EKS cluster name",
         "order": 20
       }
     ],
@@ -63,7 +63,7 @@
       {
         "name": "aws_access_key_id",
         "type": "string",
-        "description": "Auto-filled from the AWS credential template.",
+        "description": "AWS access key ID (auto-filled from credential template).",
         "sensitive": true,
         "source": "credential_template",
         "source_field": "aws_access_key_id",
@@ -72,7 +72,7 @@
       {
         "name": "aws_secret_access_key",
         "type": "string",
-        "description": "Auto-filled from the AWS credential template.",
+        "description": "AWS secret access key (auto-filled from credential template).",
         "sensitive": true,
         "source": "credential_template",
         "source_field": "aws_secret_access_key",
@@ -81,7 +81,7 @@
       {
         "name": "aws_region",
         "type": "string",
-        "description": "AWS region to deploy into. Auto-filled from the project region.",
+        "description": "AWS region (auto-filled from project).",
         "source": "project",
         "source_field": "region",
         "order": 12
@@ -89,7 +89,7 @@
       {
         "name": "aws_session_token",
         "type": "string",
-        "description": "Auto-filled from the AWS credential template (STS/SSO only).",
+        "description": "AWS session token (auto-filled from credential template; empty for static keys).",
         "default": "",
         "sensitive": true,
         "source": "credential_template",
@@ -99,7 +99,7 @@
       {
         "name": "jwt_token",
         "type": "string",
-        "description": "F5 BNK License JWT. Resolved from the jwt_token project secret.",
+        "description": "F5 BNK license JWT (resolved from project secret).",
         "sensitive": true,
         "source": "project_secret",
         "order": 21
@@ -107,7 +107,7 @@
       {
         "name": "cne_pull_secret",
         "type": "string",
-        "description": "F5 FAR registry pull credentials. Resolved from the cne_pull_secret project secret.",
+        "description": "F5 FAR registry pull credentials (resolved from project secret).",
         "sensitive": true,
         "source": "project_secret",
         "order": 22
@@ -115,22 +115,25 @@
       {
         "name": "worker_instance_type",
         "type": "string",
-        "description": "EC2 instance type for the default (BNK dSSM) node group. Default m6i.4xlarge is the validated BNK 2.3 Small minimum (16 vCPU / 64 GB, 4+ ENIs, dSSM quorum at \u00d73). Change only if you have confirmed an alternative meets the BNK 2.3 resource floor.",
+        "description": "Worker node instance type.",
         "default": "m6i.4xlarge",
+        "source": "module",
         "order": 30
       },
       {
         "name": "worker_count_per_az",
         "type": "number",
-        "description": "Default-pool nodes per AZ. Minimum 3 total for dSSM quorum (awsbnkctl enforces \u22653 desiredSize for BNK patterns). Default 1 per AZ across 3 AZs = 3 total.",
+        "description": "Worker nodes per AZ.",
         "default": 1,
+        "source": "module",
         "order": 31
       },
       {
         "name": "hp_instance_type",
         "type": "string",
-        "description": "EC2 instance type for HP TMM nodes. Default c5n.4xlarge (16 vCPU) is the awsbnkctl gold-standard HP/TMM node (doctor: 'needs \u22653 c5n.4xlarge'); the live syd-tracer cluster uses it. The BNK 2.3 Small f5-tmm pod requests ~4.7 vCPU + 4Gi hugepages, which does NOT fit on c5n.xlarge (4 vCPU). Must support \u22653 ENIs (CNI + ens7 + ens8). m5n is unavailable in some regions (e.g. ap-southeast-2); c5n.4xlarge / m6i.4xlarge are broadly available.",
+        "description": "HP TMM node instance type.",
         "default": "c5n.4xlarge",
+        "source": "module",
         "order": 32
       },
       {
@@ -138,28 +141,56 @@
         "type": "number",
         "description": "HP TMM nodes per AZ.",
         "default": 1,
+        "source": "module",
         "order": 33
       },
       {
         "name": "deployment_size",
         "type": "string",
-        "description": "CNEInstance deployment size: Small / Medium / Large / Max. Small is validated against m6i.4xlarge \u00d7 3 with awsbnkctl's live BNK 2.3 syd-tracer cluster.",
+        "description": "CNEInstance deployment size (Small / Medium / Large / Max).",
         "default": "Small",
+        "source": "module",
         "order": 40
       },
       {
         "name": "tmm_replicas",
         "type": "number",
-        "description": "TMM replicas. Default 1 \u2014 a demo/single-TMM deployment (matches awsbnkctl demo: one TMM in one AZ, simplest data-plane). Set 0 to auto-derive from AZ \u00d7 HP node count for a multi-TMM HA topology.",
+        "description": "TMM replicas.",
         "default": 1,
+        "source": "module",
         "order": 41
       },
       {
         "name": "vip_cidr",
         "type": "string",
-        "description": "CIDR for BNK Gateway VIP allocation. Empty = auto-discover from HP-nodes TMM-external subnets.",
+        "description": "VIP CIDR for BNK Gateway (empty = auto-discover from HP-node TMM subnets).",
         "default": "",
+        "source": "module",
         "order": 42
+      },
+      {
+        "name": "instance_namespace",
+        "type": "string",
+        "description": "CNEInstance namespace.",
+        "default": "f5-cne-system",
+        "source": "module",
+        "order": 50
+      },
+      {
+        "name": "instance_name",
+        "type": "string",
+        "description": "CNEInstance CR name.",
+        "default": "default-f5-cne-controller",
+        "source": "module",
+        "order": 51
+      },
+      {
+        "name": "license_namespace",
+        "type": "string",
+        "description": "Namespace for the BNK License CR (must match FLO/operator namespace).",
+        "default": "f5-cne-core",
+        "source": "module",
+        "order": 52
       }
     ]
   },
@@ -341,8 +372,8 @@
         "tmm-heal"
       ],
       "inputs": {
-        "instance_namespace": "f5-cne-system",
-        "instance_name": "default-f5-cne-controller"
+        "instance_namespace": "${instance_namespace}",
+        "instance_name": "${instance_name}"
       }
     },
     {
@@ -355,7 +386,7 @@
       ],
       "inputs": {
         "jwt_token": "${jwt_token}",
-        "license_namespace": "f5-cne-core"
+        "license_namespace": "${license_namespace}"
       }
     }
   ]
