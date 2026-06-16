@@ -2,7 +2,7 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-bnk23-traffic",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "name": "AWS EKS + BNK 2.3 Traffic-Ready (Opinionated)",
     "description": "Opinionated, one-shot greenfield deployment: provisions a new AWS EKS cluster with validated BNK 2.3 Small node sizing (m6i.4xlarge \u00d7 3 for dSSM quorum), adds a dedicated HP TMM node pool (dual secondary ENIs), installs the full BNK 2.3 platform chain, and gates on license activation \u2014 all with sensible production defaults locked in. Power users may override sizing/replicas; the minimal path requires only a cluster name \u2014 credentials and secrets are resolved from project context."
   },
@@ -322,7 +322,7 @@
       "module": "modules/eks-cluster-tmm-heal",
       "version": "1.0.0-alpha",
       "depends_on": [
-        "cneinstall"
+        "license-gate"
       ],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
@@ -351,7 +351,7 @@
       "module": "modules/eks-cluster-license-activation-gate",
       "version": "0.1.0-alpha",
       "depends_on": [
-        "ready-gate"
+        "cneinstall"
       ],
       "inputs": {
         "jwt_token": "${jwt_token}",
