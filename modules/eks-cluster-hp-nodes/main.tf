@@ -246,6 +246,14 @@ resource "aws_launch_template" "hp" {
   name_prefix = "${var.eks_cluster_name}-hp-"
   description = "BNK HP TMM nodes — IMDSv2, EBS-encrypted, dual secondary ENI bootstrap (external + internal)."
 
+  # Attach the SHARED node security group so HP nodes land in the same SG as the
+  # default node group. Without this EKS attaches the cluster-managed SG to the
+  # HP nodes; the node SG and the cluster SG do not allow each other's pod
+  # traffic, so cross-node pod connectivity (controller↔TMM gRPC :8750) is
+  # dropped and BNK never reaches Active. Empty = omit (brownfield fallback to
+  # the EKS default). See ledger D-031 NEW FINDING #2.
+  vpc_security_group_ids = var.node_security_group_id != "" ? [var.node_security_group_id] : null
+
   block_device_mappings {
     device_name = "/dev/xvda"
     ebs {

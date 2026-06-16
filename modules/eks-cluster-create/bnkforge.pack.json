@@ -3,12 +3,22 @@
   "module": {
     "name": "aws_eks_cluster_create",
     "path": "modules/eks-cluster-create",
-    "version": "0.1.0-beta",
+    "version": "0.2.0-beta",
     "category": "infra",
     "description": "Provision a new AWS EKS cluster (VPC, subnets across 3 AZs, NAT, managed node group, IRSA OIDC) ready for BNK. Uses the upstream terraform-aws-modules/vpc/aws and terraform-aws-modules/eks/aws so production hardening (IMDSv2, EBS encryption, OIDC, control-plane logging) comes from a widely-audited baseline. Outputs match aws_eks_cluster_register_existing's shape so the downstream BNK install chain is identical regardless of provisioning path.",
     "provider": "aws",
-    "supported_platforms": ["aws_eks"],
-    "tags": ["aws", "eks", "kubernetes", "cluster", "provision", "vpc", "infrastructure"],
+    "supported_platforms": [
+      "aws_eks"
+    ],
+    "tags": [
+      "aws",
+      "eks",
+      "kubernetes",
+      "cluster",
+      "provision",
+      "vpc",
+      "infrastructure"
+    ],
     "maturity": "beta"
   },
   "deployment_pack": {

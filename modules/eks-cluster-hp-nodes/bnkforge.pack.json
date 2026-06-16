@@ -3,12 +3,23 @@
   "module": {
     "name": "aws_eks_cluster_hp_nodes",
     "path": "modules/eks-cluster-hp-nodes",
-    "version": "0.4.0-alpha",
+    "version": "0.5.0-alpha",
     "category": "infra",
     "description": "Add a dedicated high-performance EKS managed node group for hosting TMM data-plane pods. Implements the generic 3-interface TMM model: CNI (ens5, VPC CNI) + external (ens7, on TMM-external subnet) + internal (ens8, on TMM-internal subnet). Creates per-AZ subnet pairs (tagged f5-bnk-role=tmm-external / tmm-internal), an IAM node role with ENI-management permissions, a launch template that bootstraps both secondary ENIs at first boot with node.k8s.amazonaws.com/no_manage=true, and the node group with app=f5-tmm label. Used by aws-eks-existing-cluster-with-hp-nodes + aws-eks-cluster-create-with-hp-nodes blueprints.",
     "provider": "aws",
-    "supported_platforms": ["aws_eks"],
-    "tags": ["aws", "eks", "kubernetes", "high-performance", "tmm", "sriov", "data-plane", "infrastructure"],
+    "supported_platforms": [
+      "aws_eks"
+    ],
+    "tags": [
+      "aws",
+      "eks",
+      "kubernetes",
+      "high-performance",
+      "tmm",
+      "sriov",
+      "data-plane",
+      "infrastructure"
+    ],
     "maturity": "alpha"
   },
   "deployment_pack": {
@@ -105,6 +116,15 @@
       }
     ],
     "optional": [
+      {
+        "name": "node_security_group_id",
+        "type": "string",
+        "description": "Shared EKS node security group ID. Attached to the HP node group launch template so HP nodes land in the SAME SG as the default node group; otherwise EKS uses the cluster-managed SG and cross-node pod traffic (controller↔TMM gRPC) is dropped. Resolved from cluster-create's node_security_group_id output; empty for brownfield (register) → falls back to the EKS default. See ledger D-031 NEW FINDING #2.",
+        "source": "module",
+        "from_module": "modules/eks-cluster-register",
+        "from_output": "node_security_group_id",
+        "default": ""
+      },
       {
         "name": "aws_session_token",
         "type": "string",

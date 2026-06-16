@@ -3,7 +3,7 @@
   "module": {
     "name": "License Activation Gate",
     "path": "modules/eks-cluster-license-activation-gate",
-    "version": "0.1.0-alpha",
+    "version": "0.2.0-alpha",
     "category": "bnk",
     "description": "Cloud-agnostic apply-then-gate for the BNK License CR. Waits for the licenses.k8s.f5net.com CRD, server-side-applies the License CR (connected mode, JWT inlined to a 0600 temp file, never logged), then polls .status.state until Active, dumps pod diagnostics and fails closed on timeout. Ported from awsbnkctl phase23_license.go + phase25_activation_poll.go. Per-cloud catalogs vendor this and call it after their cneinstance readiness gate."
   },

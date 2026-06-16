@@ -9,6 +9,11 @@
 #   MOCK_CRD_PRESENT     "1" → `get crd` exits 0 (CRD registered), else exits 1
 #   MOCK_STATE           value for the .status.state jsonpath (e.g. "Active")
 #   MOCK_APPLY_FAIL      "1" → `apply` exits 1 (simulate an apply failure)
+#   MOCK_APPLY_QUOTA_FAILS  N → the first N `apply` calls fail with the transient
+#                          "status unknown for quota" Forbidden error, then
+#                          subsequent calls succeed (simulates the quota race).
+#                          Requires MOCK_APPLY_COUNTER (a writable file path).
+#   MOCK_APPLY_COUNTER   file used to count apply attempts for QUOTA_FAILS.
 #   MOCK_PODS_JSONPATH   canned output for `get pods -o jsonpath=...`
 #   MOCK_EVENTS_JSONPATH canned output for `get events ... -o jsonpath=...`
 #
@@ -43,6 +48,18 @@ case "$args" in
     if [ "${MOCK_APPLY_FAIL:-0}" = "1" ]; then
       echo "mock-kubectl: simulated apply failure" >&2
       exit 1
+    fi
+    # Simulate the transient ResourceQuota race: fail the first N applies with
+    # the exact admission error the script greps for, then succeed.
+    if [ "${MOCK_APPLY_QUOTA_FAILS:-0}" != "0" ] && [ -n "${MOCK_APPLY_COUNTER:-}" ]; then
+      n=0
+      [ -f "$MOCK_APPLY_COUNTER" ] && n="$(cat "$MOCK_APPLY_COUNTER")"
+      n=$((n + 1))
+      echo "$n" > "$MOCK_APPLY_COUNTER"
+      if [ "$n" -le "$MOCK_APPLY_QUOTA_FAILS" ]; then
+        echo "Error from server (Forbidden): licenses.k8s.f5net.com \"bnk-license\" is forbidden: status unknown for quota: f5-single-license-quota, resources: count/licenses.k8s.f5net.com" >&2
+        exit 1
+      fi
     fi
     echo "license.k8s.f5net.com/bnk-license serverside-applied"
     exit 0

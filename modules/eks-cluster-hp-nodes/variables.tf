@@ -36,6 +36,12 @@ variable "vpc_id" {
   type        = string
 }
 
+variable "node_security_group_id" {
+  description = "Shared EKS node security group ID (from cluster-create's node_security_group_id output). Attached to the HP node group launch template so HP nodes land in the SAME SG as the default node group. If empty (e.g. brownfield/register can't expose it), the launch template omits it and EKS falls back to the cluster-managed SG — which BREAKS cross-node pod traffic between the two SGs (controller↔TMM gRPC). See ledger D-031 NEW FINDING #2."
+  type        = string
+  default     = ""
+}
+
 variable "vpc_cidr" {
   description = "Primary CIDR block of the cluster VPC. Used to auto-carve TMM subnet CIDRs when explicit *_subnet_cidrs lists are empty."
   type        = string

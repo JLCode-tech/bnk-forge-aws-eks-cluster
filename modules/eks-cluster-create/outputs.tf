@@ -117,3 +117,8 @@ output "node_group_iam_role_arns" {
   description = "Map of EKS managed node group name → IAM role ARN. Useful when downstream modules need to grant node-side permissions."
   value       = { for k, v in module.eks.eks_managed_node_groups : k => v.iam_role_arn }
 }
+
+output "node_security_group_id" {
+  description = "ID of the shared EKS node security group created by the cluster module. Downstream node groups (e.g. eks-cluster-hp-nodes) MUST attach this on their launch template so every node lands in the SAME SG — otherwise EKS falls back to the cluster-managed SG and cross-node pod traffic between the two SGs is dropped (controller↔TMM gRPC). See ledger D-031 NEW FINDING #2."
+  value       = module.eks.node_security_group_id
+}

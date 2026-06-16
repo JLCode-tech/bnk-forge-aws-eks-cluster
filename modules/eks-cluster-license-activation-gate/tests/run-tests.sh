@@ -42,6 +42,8 @@ export ACTIVATION_TIMEOUT=2
 export CRD_TIMEOUT=2
 export POLL_INTERVAL=1
 export CRD_POLL_INTERVAL=1
+export APPLY_TIMEOUT=3
+export APPLY_POLL_INTERVAL=1
 
 PASS=0
 FAIL=0
@@ -58,7 +60,8 @@ run() {
 
 clear_mock() {
   unset MOCK_CRD_PRESENT MOCK_STATE MOCK_APPLY_FAIL \
-        MOCK_PODS_JSONPATH MOCK_EVENTS_JSONPATH MOCK_APPLY_LOG
+        MOCK_PODS_JSONPATH MOCK_EVENTS_JSONPATH MOCK_APPLY_LOG \
+        MOCK_APPLY_QUOTA_FAILS MOCK_APPLY_COUNTER
 }
 
 # --- (a) state Active → applies CR then exit 0 ------------------------------
@@ -103,11 +106,26 @@ run
 if [ "$RC" -ne 0 ]; then ok "(d) missing CRD → fail closed ($RC)"; else bad "(d) passed with no CRD"; fi
 if grep -q "ARGV: kubectl apply" "$APPLY_LOG"; then bad "(d) applied the CR despite missing CRD"; else ok "(d) did not apply the CR before the CRD existed"; fi
 
-# --- (apply-fail) kubectl apply fails → fail closed -------------------------
+# --- (apply-fail) kubectl apply fails persistently → fail closed ------------
 clear_mock
 export MOCK_CRD_PRESENT=1 MOCK_STATE="Active" MOCK_APPLY_FAIL=1
 run
-if [ "$RC" -ne 0 ]; then ok "(apply-fail) apply error → fail closed ($RC)"; else bad "(apply-fail) passed despite apply failure"; fi
+if [ "$RC" -ne 0 ]; then ok "(apply-fail) persistent apply error → fail closed ($RC)"; else bad "(apply-fail) passed despite apply failure"; fi
+
+# --- (quota-retry) transient ResourceQuota race → retry then succeed --------
+# The License now applies right after the CNEInstance, so it can hit the quota
+# controller before .status.used is populated ("status unknown for quota"). The
+# apply must retry and then succeed once the quota catches up. (NEW FINDING #1)
+clear_mock
+export MOCK_CRD_PRESENT=1 MOCK_STATE="Active"
+export MOCK_APPLY_QUOTA_FAILS=2
+export MOCK_APPLY_COUNTER="$(mktemp)"
+APPLY_LOG="$(mktemp)"; export MOCK_APPLY_LOG="$APPLY_LOG"
+run
+if [ "$RC" -eq 0 ]; then ok "(quota-retry) retried through quota race → exit 0 ($RC)"; else bad "(quota-retry) expected 0 got $RC"; cat "$OUT_FILE"; fi
+if grep -q "transient quota race" "$OUT_FILE"; then ok "(quota-retry) recognised the quota race"; else bad "(quota-retry) did not log the quota race"; fi
+APPLY_ATTEMPTS="$(grep -c "ARGV: kubectl apply" "$APPLY_LOG")"
+if [ "$APPLY_ATTEMPTS" -ge 3 ]; then ok "(quota-retry) retried apply ($APPLY_ATTEMPTS attempts)"; else bad "(quota-retry) expected >=3 apply attempts, got $APPLY_ATTEMPTS"; fi
 
 echo ""
 echo "==> $PASS passed, $FAIL failed"
