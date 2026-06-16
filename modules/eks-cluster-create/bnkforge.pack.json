@@ -3,7 +3,7 @@
   "module": {
     "name": "aws_eks_cluster_create",
     "path": "modules/eks-cluster-create",
-    "version": "0.2.0-beta",
+    "version": "0.3.0-beta",
     "category": "infra",
     "description": "Provision a new AWS EKS cluster (VPC, subnets across 3 AZs, NAT, managed node group, IRSA OIDC) ready for BNK. Uses the upstream terraform-aws-modules/vpc/aws and terraform-aws-modules/eks/aws so production hardening (IMDSv2, EBS encryption, OIDC, control-plane logging) comes from a widely-audited baseline. Outputs match aws_eks_cluster_register_existing's shape so the downstream BNK install chain is identical regardless of provisioning path.",
     "provider": "aws",
@@ -120,6 +120,15 @@
         "description": "When true, tag private subnets with 'f5-bnk-role=tmm-external' so the cluster-create outputs (and downstream cneinstall) can auto-discover them for the BNKGateway CR's defaultListenerNetworks.",
         "source": "user",
         "default": true
+      },
+      {
+        "name": "endpoint_public_access_cidrs",
+        "type": "list(string)",
+        "description": "Source CIDRs allowed to reach the EKS public API endpoint. Default 0.0.0.0/0 (open — Forge reaches the API from a variable NAT egress IP). Hardening: set to operator/jumphost CIDRs. Private endpoint always on. See ledger D-031 SECURITY NOTE.",
+        "source": "user",
+        "default": [
+          "0.0.0.0/0"
+        ]
       }
     ]
   },

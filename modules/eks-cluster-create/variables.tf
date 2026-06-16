@@ -37,6 +37,12 @@ variable "eks_cluster_version" {
   default     = ""
 }
 
+variable "endpoint_public_access_cidrs" {
+  description = "Source CIDRs allowed to reach the EKS public API endpoint. Defaults to 0.0.0.0/0 (open — required so Forge can reach the API from a variable NAT egress IP). HARDENING: set this to the operator/Forge egress + jumphost CIDRs to lock the public endpoint down. The private endpoint is always enabled, so in-VPC access is unaffected. See ledger D-031 SECURITY NOTE."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 # =============================================================================
 # Network configuration
 # =============================================================================
