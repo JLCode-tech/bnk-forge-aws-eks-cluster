@@ -17,7 +17,7 @@ A module variable is VISIBLE-REQUIRED when:
   - It is not covered by a top-level blueprint source=module/credential_template/
     project/project_secret declaration (which means Forge auto-resolves it).
 
-Prints visible required inputs. Exit 0 if exactly ['eks_cluster_name'], else 1.
+Prints visible required inputs. Exit 0 if zero visible required inputs, else 1.
 
 Usage: python3 scripts/validate_blueprint_ui_inputs.py <blueprint-dir>
   e.g. python3 scripts/validate_blueprint_ui_inputs.py blueprints/aws-eks-bnk23-traffic
@@ -304,23 +304,20 @@ def main():
     print()
 
     # PASS requires:
-    #   1. Exactly one visible required input: eks_cluster_name
+    #   1. Zero visible required inputs (eks_cluster_name is now context-resolved from project name)
     #   2. No TF-only visible vars (pack.json or blueprint is missing declarations for them)
     tf_only_count = len(result["tf_only_visible_names"])
-    required_ok = (
-        result["total_required"] == 1
-        and result["visible_required_names"] == ["eks_cluster_name"]
-    )
+    required_ok = result["total_required"] == 0
     tf_only_ok = tf_only_count == 0
 
     if required_ok and tf_only_ok:
-        print("✅ PASS: exactly one visible required field: eks_cluster_name")
+        print("✅ PASS: zero visible required fields (eks_cluster_name resolved from project name)")
         print("✅ PASS: no TF-only visible inputs missing from blueprint declarations")
         sys.exit(0)
     else:
         if not required_ok:
             print(
-                f"❌ FAIL: expected 1 visible required (eks_cluster_name), "
+                f"❌ FAIL: expected 0 visible required inputs, "
                 f"got {result['total_required']}: {result['visible_required_names']}"
             )
         if not tf_only_ok:

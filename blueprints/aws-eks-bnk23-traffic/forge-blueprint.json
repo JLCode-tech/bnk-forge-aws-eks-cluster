@@ -2,9 +2,9 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-bnk23-traffic",
-    "version": "0.5.3",
+    "version": "0.5.4",
     "name": "AWS EKS + BNK 2.3 Traffic-Ready",
-    "description": "One-field deploy: provisions a new AWS EKS cluster and installs the full BNK 2.3 platform (HP TMM node pool, Multus, hugepages, cert-manager, FLO, CNEInstance, license gate). Only the cluster name is required; all credentials and operational settings are resolved automatically."
+    "description": "Deploys AWS EKS and BNK 2.3 with opinionated defaults."
   },
   "bnk_version": "2.3",
   "category": "infra",
@@ -51,15 +51,16 @@
     }
   ],
   "inputs": {
-    "required": [
+    "required": [],
+    "optional": [
       {
         "name": "eks_cluster_name",
         "type": "string",
-        "description": "EKS cluster name",
+        "description": "EKS cluster name (derived from project name).",
+        "source": "project",
+        "source_field": "name",
         "order": 20
-      }
-    ],
-    "optional": [
+      },
       {
         "name": "aws_access_key_id",
         "type": "string",
