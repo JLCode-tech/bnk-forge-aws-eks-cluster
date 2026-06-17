@@ -2,7 +2,7 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-bnk23-traffic",
-    "version": "0.5.1",
+    "version": "0.5.2",
     "name": "AWS EKS + BNK 2.3 Traffic-Ready",
     "description": "One-field deploy: provisions a new AWS EKS cluster and installs the full BNK 2.3 platform (HP TMM node pool, Multus, hugepages, cert-manager, FLO, CNEInstance, license gate). Only the cluster name is required; all credentials and operational settings are resolved automatically."
   },
@@ -18,7 +18,7 @@
   "icon": "Cloud",
   "color": "orange",
   "estimated_time": "40-60 minutes",
-  "estimated_cost": "AWS usage-based (EKS control plane + 3× m6i.4xlarge workers + 1× c5n.4xlarge HP node + NAT gateway)",
+  "estimated_cost": "AWS usage-based (EKS control plane + 3\u00d7 m6i.4xlarge workers + 1\u00d7 c5n.4xlarge HP node + NAT gateway)",
   "difficulty": "intermediate",
   "maturity": "alpha",
   "tags": [
@@ -191,6 +191,713 @@
         "default": "f5-cne-core",
         "source": "module",
         "order": 52
+      },
+      {
+        "name": "activation_timeout_seconds",
+        "type": "number",
+        "description": "Max seconds to wait for License .status.state == Active before failing closed.",
+        "source": "module",
+        "default": 570
+      },
+      {
+        "name": "additional_ips_per_eni",
+        "type": "number",
+        "description": "Additional private IPs allocated on EACH secondary ENI at creation. 0 = let cneinstall's IPAM manage allocation.",
+        "source": "module",
+        "default": 0
+      },
+      {
+        "name": "availability_zone_count",
+        "type": "number",
+        "description": "Number of AZs the cluster spans. Auto-wired from cluster-register; used as the natural ceiling for the smart tmm_replicas default.",
+        "source": "module",
+        "default": 3
+      },
+      {
+        "name": "availability_zones",
+        "type": "string",
+        "description": "AZs to spread HP nodes across.",
+        "source": "module"
+      },
+      {
+        "name": "bnk_gateway_name",
+        "type": "string",
+        "description": "Name of the BNKGateway CR (kind: F5BnkGateway).",
+        "source": "module",
+        "default": "bnk-gateway"
+      },
+      {
+        "name": "bnk_manifest_version",
+        "type": "string",
+        "description": "BNK manifest version to download from FAR (e.g. 2.3.0-3.2598.3-0.0.170). Must start with X.Y.Z- format.",
+        "source": "module",
+        "default": "2.3.0-3.2598.3-0.0.170"
+      },
+      {
+        "name": "ca_certificate_name",
+        "type": "string",
+        "description": "Name of the CA Certificate resource",
+        "source": "module",
+        "default": "bnk-ca"
+      },
+      {
+        "name": "ca_duration",
+        "type": "string",
+        "description": "Requested CA certificate duration",
+        "source": "module",
+        "default": "87600h"
+      },
+      {
+        "name": "ca_renew_before",
+        "type": "string",
+        "description": "Renewal window before CA certificate expiry",
+        "source": "module",
+        "default": "720h"
+      },
+      {
+        "name": "ca_secret_name",
+        "type": "string",
+        "description": "Secret name that stores the generated CA keypair",
+        "source": "module",
+        "default": "bnk-ca-secret"
+      },
+      {
+        "name": "cainjector_replicas",
+        "type": "number",
+        "description": "Number of cert-manager cainjector replicas",
+        "source": "module",
+        "default": 1
+      },
+      {
+        "name": "cert_manager_ready",
+        "type": "boolean",
+        "description": "Dependency gate from cert-manager (ensures CRDs exist before FLO references the ClusterIssuer).",
+        "source": "module",
+        "default": true
+      },
+      {
+        "name": "cert_manager_version",
+        "type": "string",
+        "description": "Jetstack cert-manager chart version",
+        "source": "module",
+        "default": "v1.16.1"
+      },
+      {
+        "name": "cloud_az_subnet_mappings",
+        "type": "string",
+        "description": "AWS AZ \u2192 subnet mapping for the cloud-network-mapping ConfigMap. Auto-wired from eks-cluster-register.cloud_az_subnet_mappings \u2014 discovered from the EKS cluster's own VPC config, so users don't have to re-enter what EKS already knows.",
+        "source": "module",
+        "default": []
+      },
+      {
+        "name": "cluster_issuer_name",
+        "type": "string",
+        "description": "Name of the CA-backed ClusterIssuer for BNK components",
+        "source": "module",
+        "default": "bnk-ca-cluster-issuer"
+      },
+      {
+        "name": "cluster_name",
+        "type": "string",
+        "description": "Name of the Kubernetes cluster. Auto-wired from the cloud cluster module when available.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "cluster_oidc_issuer_url",
+        "type": "string",
+        "description": "OIDC issuer URL of the EKS cluster.",
+        "source": "module"
+      },
+      {
+        "name": "cne_crd_name",
+        "type": "string",
+        "description": "Fully-qualified CNEInstance CRD name for the CRD pre-gate.",
+        "source": "module",
+        "default": "cneinstances.k8s.f5.com"
+      },
+      {
+        "name": "cneinstall_ready",
+        "type": "boolean",
+        "description": "Ordering gate from cneinstall.host_device_applied \u2014 heals run after the CNEInstance is applied.",
+        "source": "module",
+        "default": true
+      },
+      {
+        "name": "condition_timeout_seconds",
+        "type": "number",
+        "description": "Max seconds to wait for the readiness conditions before failing closed.",
+        "source": "module",
+        "default": 570
+      },
+      {
+        "name": "container_platform",
+        "type": "string",
+        "description": "Container platform value passed to FLO. AWS enables cloud-aware gRPC and networking behavior \u2014 different from the upstream bnk/flo default of 'Generic'.",
+        "source": "module",
+        "default": "AWS"
+      },
+      {
+        "name": "controller_replicas",
+        "type": "number",
+        "description": "Number of cert-manager controller replicas",
+        "source": "module",
+        "default": 1
+      },
+      {
+        "name": "crd_timeout_seconds",
+        "type": "number",
+        "description": "Max seconds to wait for the CNEInstance CRD to be registered.",
+        "source": "module",
+        "default": 300
+      },
+      {
+        "name": "crds_installed",
+        "type": "boolean",
+        "description": "Dependency gate from FLO \u2014 BNK CRDs must be registered before applying CNEInstance.",
+        "source": "module",
+        "default": true
+      },
+      {
+        "name": "daemonset_rollout_timeout",
+        "type": "string",
+        "description": "kubectl rollout status timeout for the hugepages-setup DaemonSet to be Ready. Default 300s matches awsbnkctl Phase 11b hugepagesReadyTimeout.",
+        "source": "module",
+        "default": "300s"
+      },
+      {
+        "name": "eks_cluster_version",
+        "type": "string",
+        "description": "EKS Kubernetes minor version (e.g. '1.30'). Empty = community module picks the latest stable.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "endpoint_public_access_cidrs",
+        "type": "string",
+        "description": "Source CIDRs allowed to reach the EKS public API endpoint. Default 0.0.0.0/0 (open \u2014 Forge reaches the API from a variable NAT egress IP). Hardening: set to operator/jumphost CIDRs. Private endpoint always on. See ledger D-031 SECURITY NOTE.",
+        "source": "module",
+        "default": [
+          "0.0.0.0/0"
+        ]
+      },
+      {
+        "name": "external_eni_device_index",
+        "type": "number",
+        "description": "Device index for the TMM-external secondary ENI. 2 \u2192 ens7 on AL2023 (matches ens7-ipvlan-l2 NAD default).",
+        "source": "module",
+        "default": 2
+      },
+      {
+        "name": "external_ifname",
+        "type": "string",
+        "description": "External TMM ENI ifname (host-device CNEInstance env). Auto-wired from tmm-nads.external_ifname.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "external_pci",
+        "type": "string",
+        "description": "External TMM ENI PCI bus id (PCIDEVICE_INTEL_COM_<IF>). Auto-wired from tmm-nads.external_pci.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "external_selfip",
+        "type": "string",
+        "description": "External TMM SelfIP (ext-vlan F5SPKVlan). Empty disables the host-device F5SPKVlan/GatewayClass step. Auto-wired from tmm-nads.external_selfip.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "f5_license_proxy_url",
+        "type": "string",
+        "description": "F5 License Proxy URL \u2014 used only when license_mode is 'f5licenseproxy'.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "far_secret_name",
+        "type": "string",
+        "description": "FAR image pull secret name. Auto-wired from bnk-prereqs.",
+        "source": "module",
+        "default": "far-secret"
+      },
+      {
+        "name": "flo_namespace",
+        "type": "string",
+        "description": "Namespace for FLO deployment. Auto-wired from bnk-prereqs.operator_namespace.",
+        "source": "module",
+        "default": "f5-cne-core"
+      },
+      {
+        "name": "flo_ready",
+        "type": "boolean",
+        "description": "Dependency gate from FLO module \u2014 must be true before applying CNEInstance.",
+        "source": "module",
+        "default": true
+      },
+      {
+        "name": "flo_version",
+        "type": "string",
+        "description": "FLO Helm chart version. Auto-wired from the BNK manifest parsed by bnk-prereqs.",
+        "source": "module"
+      },
+      {
+        "name": "forge_kubeconfig_content",
+        "type": "string",
+        "description": "Kubeconfig YAML content. Auto-injected by BNK-Forge from the selected cluster. Set manually for standalone usage.",
+        "source": "module",
+        "sensitive": true,
+        "default": ""
+      },
+      {
+        "name": "gateway_namespace",
+        "type": "string",
+        "description": "Namespace for Gateway API resources (Gateway, HTTPRoute, etc.).",
+        "source": "module",
+        "default": "bnk-gw"
+      },
+      {
+        "name": "install_hugepages",
+        "type": "boolean",
+        "description": "Apply the hugepages-setup DaemonSet. Set false if hugepages are already configured on the cluster's BNK nodes.",
+        "source": "module",
+        "default": true
+      },
+      {
+        "name": "install_multus",
+        "type": "boolean",
+        "description": "Apply the upstream multus-daemonset. Set false if Multus is already installed on the cluster.",
+        "source": "module",
+        "default": true
+      },
+      {
+        "name": "instance_type",
+        "type": "string",
+        "description": "EC2 instance type. Must support at least 3 total ENIs (primary + 2 secondary). m5n.large (default) supports 3; m5n.xlarge/c5n.xlarge support 4+.",
+        "source": "module",
+        "default": "m5n.large"
+      },
+      {
+        "name": "internal_eni_device_index",
+        "type": "number",
+        "description": "Device index for the TMM-internal secondary ENI. 3 \u2192 ens8 on AL2023 (matches ens8-ipvlan-l2 NAD default).",
+        "source": "module",
+        "default": 3
+      },
+      {
+        "name": "internal_ifname",
+        "type": "string",
+        "description": "Internal TMM ENI ifname. Auto-wired from tmm-nads.internal_ifname.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "internal_pci",
+        "type": "string",
+        "description": "Internal TMM ENI PCI bus id. Auto-wired from tmm-nads.internal_pci.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "internal_selfip",
+        "type": "string",
+        "description": "Internal TMM SelfIP (int-vlan F5SPKVlan). Auto-wired from tmm-nads.internal_selfip.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "kubeconfig_file",
+        "type": "string",
+        "description": "Path to an existing kubeconfig. Empty = materialise from forge_kubeconfig_content.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "license_crd_name",
+        "type": "string",
+        "description": "Fully-qualified License CRD name for the CRD pre-gate.",
+        "source": "module",
+        "default": "licenses.k8s.f5net.com"
+      },
+      {
+        "name": "license_mode",
+        "type": "string",
+        "description": "License mode: 'connected' (talks to F5 license server) or 'f5licenseproxy' (talks to a local F5 License Proxy).",
+        "source": "module",
+        "default": "connected"
+      },
+      {
+        "name": "license_name",
+        "type": "string",
+        "description": "Name of the License CR to apply and poll.",
+        "source": "module",
+        "default": "bnk-license"
+      },
+      {
+        "name": "manifest_version",
+        "type": "string",
+        "description": "BNK manifest version (referenced in the CNEInstance CR).",
+        "source": "module"
+      },
+      {
+        "name": "multus_crd_wait_timeout",
+        "type": "string",
+        "description": "Timeout for the NetworkAttachmentDefinition CRD to be Established.",
+        "source": "module",
+        "default": "120s"
+      },
+      {
+        "name": "multus_manifest_url",
+        "type": "string",
+        "description": "Explicit override for the multus-daemonset URL. Empty = build from multus_version.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "multus_ready",
+        "type": "boolean",
+        "description": "Gate from eks-cluster-install-multus. Asserted true before host-device NADs are applied.",
+        "source": "module"
+      },
+      {
+        "name": "multus_rollout_wait_timeout",
+        "type": "string",
+        "description": "Timeout for the kube-multus-ds DaemonSet rollout.",
+        "source": "module",
+        "default": "180s"
+      },
+      {
+        "name": "multus_version",
+        "type": "string",
+        "description": "Multus release tag.",
+        "source": "module",
+        "default": "v4.2.4"
+      },
+      {
+        "name": "nad_external_name",
+        "type": "string",
+        "description": "External host-device NAD name (\u2192 TMM trunk 1.1). Must match cneinstall network_attachments[0].",
+        "source": "module",
+        "default": "external-netdevice"
+      },
+      {
+        "name": "nad_internal_name",
+        "type": "string",
+        "description": "Internal host-device NAD name (\u2192 TMM trunk 1.2). Must match cneinstall network_attachments[1].",
+        "source": "module",
+        "default": "internal-netdevice"
+      },
+      {
+        "name": "nad_namespace",
+        "type": "string",
+        "description": "Namespace where the NADs are created (plus `default`). MUST match the CNEInstance namespace. Gold-standard split: f5-cne-system.",
+        "source": "module",
+        "default": "f5-cne-system"
+      },
+      {
+        "name": "namespace",
+        "type": "string",
+        "description": "Namespace for cert-manager deployment",
+        "source": "module",
+        "default": "cert-manager"
+      },
+      {
+        "name": "network_attachments",
+        "type": "string",
+        "description": "NAD names attached to TMM, in order: [0] \u2192 trunk 1.1 (external), [1] \u2192 trunk 1.2 (internal). Host-device NADs applied by tmm-nads.",
+        "source": "module",
+        "default": [
+          "external-netdevice",
+          "internal-netdevice"
+        ]
+      },
+      {
+        "name": "node_count_per_az",
+        "type": "number",
+        "description": "Desired HP nodes per AZ. 0 = skip the node group entirely (subnets still created when tag_subnets_for_tmm = true).",
+        "source": "module",
+        "default": 1
+      },
+      {
+        "name": "node_disk_size_gb",
+        "type": "number",
+        "description": "Root volume size for HP nodes.",
+        "source": "module",
+        "default": 50
+      },
+      {
+        "name": "node_label_app",
+        "type": "string",
+        "description": "Value for the 'app' label on HP nodes; FLO matches this to schedule TMM pods.",
+        "source": "module",
+        "default": "f5-tmm"
+      },
+      {
+        "name": "node_security_group_id",
+        "type": "string",
+        "description": "Shared EKS node security group ID. Attached to the HP node group launch template so HP nodes land in the SAME SG as the default node group; otherwise EKS uses the cluster-managed SG and cross-node pod traffic (controller\u2194TMM gRPC) is dropped. Resolved from cluster-create's node_security_group_id output; empty for brownfield (register) \u2192 falls back to the EKS default. See ledger D-031 NEW FINDING #2.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "node_subnet_ids",
+        "type": "string",
+        "description": "Private subnet IDs where the HP managed node group places its PRIMARY ENI. cluster-register and cluster-create both expose private_subnet_ids: register aliases it to the full subnet list (brownfield can't safely distinguish), create returns only the truly private subnets it provisioned. Either way HP nodes stay off public subnets. Both secondary ENIs land in dedicated TMM subnets via user-data.",
+        "source": "module"
+      },
+      {
+        "name": "operation_mode",
+        "type": "string",
+        "description": "License operationMode. Connected only.",
+        "source": "module",
+        "default": "connected"
+      },
+      {
+        "name": "operator_namespace",
+        "type": "string",
+        "description": "Operator namespace \u2014 FLO, License CR, OTEL/CWC. Gold-standard split: f5-cne-core. CNEInstance + CNE controller live in instance_namespace.",
+        "source": "module",
+        "default": "f5-cne-core"
+      },
+      {
+        "name": "otel_duration",
+        "type": "string",
+        "description": "Requested OTEL certificate duration",
+        "source": "module",
+        "default": "8640h"
+      },
+      {
+        "name": "otel_f5ing_server_certificate_name",
+        "type": "string",
+        "description": "Name of F5 ingestion OTEL certificate resource",
+        "source": "module",
+        "default": "external-f5ingotelsvr"
+      },
+      {
+        "name": "otel_f5ing_server_secret_name",
+        "type": "string",
+        "description": "Secret name generated by F5 ingestion OTEL certificate",
+        "source": "module",
+        "default": "external-f5ingotelsvr-secret"
+      },
+      {
+        "name": "otel_renew_before",
+        "type": "string",
+        "description": "Renewal window before OTEL certificate expiry",
+        "source": "module",
+        "default": "720h"
+      },
+      {
+        "name": "otel_server_certificate_name",
+        "type": "string",
+        "description": "Name of OTEL server certificate resource",
+        "source": "module",
+        "default": "external-otelsvr"
+      },
+      {
+        "name": "otel_server_secret_name",
+        "type": "string",
+        "description": "Secret name generated by OTEL server certificate",
+        "source": "module",
+        "default": "external-otelsvr-secret"
+      },
+      {
+        "name": "poll_interval_seconds",
+        "type": "number",
+        "description": "Seconds between condition-gate poll iterations.",
+        "source": "module",
+        "default": 30
+      },
+      {
+        "name": "release_name",
+        "type": "string",
+        "description": "Helm release name for cert-manager",
+        "source": "module",
+        "default": "cert-manager"
+      },
+      {
+        "name": "resources",
+        "type": "string",
+        "description": "Optional cert-manager chart resources block (null uses chart defaults)",
+        "source": "module"
+      },
+      {
+        "name": "self_signed_cluster_issuer_name",
+        "type": "string",
+        "description": "Name of the bootstrap self-signed ClusterIssuer",
+        "source": "module",
+        "default": "bnk-selfsigned-cluster-issuer"
+      },
+      {
+        "name": "selfip_host_offset",
+        "type": "number",
+        "description": "Host octet for the TMM SelfIP within each /24 TMM subnet (awsbnkctl uses .240).",
+        "source": "module",
+        "default": 240
+      },
+      {
+        "name": "selfip_prefixlen",
+        "type": "number",
+        "description": "TMM SelfIP prefix length. Auto-wired from tmm-nads.selfip_prefixlen.",
+        "source": "module",
+        "default": 24
+      },
+      {
+        "name": "skip_iface_discovery",
+        "type": "boolean",
+        "description": "Skip the privileged iface-discovery pod and use the deterministic device-index PCI fallback (ens8=0000:00:08.0, ens7=0000:00:07.0).",
+        "source": "module",
+        "default": false
+      },
+      {
+        "name": "storage_class_name",
+        "type": "string",
+        "description": "StorageClass for CNEInstance persistent state.",
+        "source": "module",
+        "default": "gp3"
+      },
+      {
+        "name": "tag_private_subnets_for_tmm",
+        "type": "boolean",
+        "description": "When true, tag private subnets with 'f5-bnk-role=tmm-external' so the cluster-create outputs (and downstream cneinstall) can auto-discover them for the BNKGateway CR's defaultListenerNetworks.",
+        "source": "module",
+        "default": true
+      },
+      {
+        "name": "tag_subnets_for_tmm",
+        "type": "boolean",
+        "description": "Tag TMM-external subnets with 'f5-bnk-role=tmm-external' and TMM-internal subnets with 'f5-bnk-role=tmm-internal' for cneinstall auto-discovery.",
+        "source": "module",
+        "default": true
+      },
+      {
+        "name": "teem_cert_url",
+        "type": "string",
+        "description": "TEEM cert URL (spec.teemCertUrl).",
+        "source": "module",
+        "default": "https://product.apis.f5.com/ee/v1"
+      },
+      {
+        "name": "teem_entitlement_url",
+        "type": "string",
+        "description": "TEEM entitlement URL (spec.teemEntitlementUrl).",
+        "source": "module",
+        "default": "https://product-s.apis.f5.com/ee/v1"
+      },
+      {
+        "name": "teem_initial_config_url",
+        "type": "string",
+        "description": "TEEM initial-config URL (spec.teemInitialConfigUrl).",
+        "source": "module",
+        "default": "https://product-s.apis.f5.com/ee/v1"
+      },
+      {
+        "name": "tmm_az",
+        "type": "string",
+        "description": "AZ of the single TMM node \u2014 restricts cloud-network-mapping to one AZ. Auto-wired from tmm-nads.tmm_az.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "tmm_external_subnet_cidrs",
+        "type": "string",
+        "description": "Explicit TMM-external subnet CIDRs. Empty list = auto-carve from vpc_cidr.",
+        "source": "module",
+        "default": []
+      },
+      {
+        "name": "tmm_external_subnets_by_az",
+        "type": "string",
+        "description": "TMM external subnets per AZ, discovered by cluster-register via the AWS subnet tag 'f5-bnk-role=tmm-external'. Auto-wired; user shouldn't set this directly. Customers tag their TMM data-plane subnets in AWS, then the cneinstall module auto-builds the BNKGateway CR from those.",
+        "source": "module",
+        "default": []
+      },
+      {
+        "name": "tmm_internal_subnet_cidrs",
+        "type": "string",
+        "description": "Explicit TMM-internal subnet CIDRs. Empty list = auto-carve from vpc_cidr.",
+        "source": "module",
+        "default": []
+      },
+      {
+        "name": "utils_namespace",
+        "type": "string",
+        "description": "Namespace for utility components (e.g. IPAM if deployed separately).",
+        "source": "module",
+        "default": "f5-utils"
+      },
+      {
+        "name": "vip_network_name",
+        "type": "string",
+        "description": "Logical name for the VIP listener network in the BNKGateway CR.",
+        "source": "module",
+        "default": "default"
+      },
+      {
+        "name": "vpc_cidr",
+        "type": "string",
+        "description": "CIDR block for the new VPC. Default leaves room for /24 subnets per AZ.",
+        "source": "module",
+        "default": "10.0.0.0/16"
+      },
+      {
+        "name": "vpc_id",
+        "type": "string",
+        "description": "Cluster VPC ID.",
+        "source": "module"
+      },
+      {
+        "name": "watch_namespaces",
+        "type": "string",
+        "description": "Which namespaces the CNE controller watches for Gateway/HTTPRoute CRs. [\"All\"] = everything.",
+        "source": "module",
+        "default": [
+          "All"
+        ]
+      },
+      {
+        "name": "webhook_replicas",
+        "type": "number",
+        "description": "Number of cert-manager webhook replicas",
+        "source": "module",
+        "default": 1
+      },
+      {
+        "name": "worker_disk_size_gb",
+        "type": "number",
+        "description": "Worker node root volume size.",
+        "source": "module",
+        "default": 50
+      },
+      {
+        "name": "worker_node_count",
+        "type": "number",
+        "description": "Total worker node count. Auto-wired from cluster-register; caps the smart tmm_replicas default (TMM pod can't schedule without a node).",
+        "source": "module",
+        "default": 3
+      },
+      {
+        "name": "eks_cluster_name",
+        "type": "string",
+        "description": "EKS cluster name (module-level alias — hides per-module eks_cluster_name vars that declare source:user).",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "create_cluster_issuer",
+        "type": "boolean",
+        "description": "Create self-signed ClusterIssuer (cert-manager module internal).",
+        "source": "module",
+        "default": true
+      },
+      {
+        "name": "create_otel_certs",
+        "type": "boolean",
+        "description": "Create OTEL telemetry certificates via cert-manager (cert-manager module internal).",
+        "source": "module",
+        "default": true
       }
     ]
   },
