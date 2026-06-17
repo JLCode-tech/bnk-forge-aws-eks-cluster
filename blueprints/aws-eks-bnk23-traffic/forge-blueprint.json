@@ -2,7 +2,7 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-bnk23-traffic",
-    "version": "0.5.2",
+    "version": "0.5.3",
     "name": "AWS EKS + BNK 2.3 Traffic-Ready",
     "description": "One-field deploy: provisions a new AWS EKS cluster and installs the full BNK 2.3 platform (HP TMM node pool, Multus, hugepages, cert-manager, FLO, CNEInstance, license gate). Only the cluster name is required; all credentials and operational settings are resolved automatically."
   },
@@ -898,6 +898,209 @@
         "description": "Create OTEL telemetry certificates via cert-manager (cert-manager module internal).",
         "source": "module",
         "default": true
+      },
+      {
+        "name": "private_subnet_newbits",
+        "type": "number",
+        "description": "Bits added to vpc_cidr when carving private subnets. Default 8 → /24 subnets from a /16 VPC.",
+        "source": "module",
+        "default": 8
+      },
+      {
+        "name": "public_subnet_newbits",
+        "type": "number",
+        "description": "Bits added to vpc_cidr when carving public subnets.",
+        "source": "module",
+        "default": 8
+      },
+      {
+        "name": "tags",
+        "type": "string",
+        "description": "Additional tags applied to all created AWS resources.",
+        "source": "module",
+        "default": {}
+      },
+      {
+        "name": "tmm_external_subnet_newbits",
+        "type": "number",
+        "description": "Bits added to vpc_cidr when auto-carving TMM-external subnets. Default 8 → /24.",
+        "source": "module",
+        "default": 8
+      },
+      {
+        "name": "tmm_external_subnet_index_offset",
+        "type": "number",
+        "description": "Starting subnet index for cidrsubnet() when auto-carving TMM-external subnets.",
+        "source": "module",
+        "default": 200
+      },
+      {
+        "name": "tmm_internal_subnet_newbits",
+        "type": "number",
+        "description": "Bits added to vpc_cidr when auto-carving TMM-internal subnets. Default 8 → /24.",
+        "source": "module",
+        "default": 8
+      },
+      {
+        "name": "tmm_internal_subnet_index_offset",
+        "type": "number",
+        "description": "Starting subnet index for cidrsubnet() when auto-carving TMM-internal subnets.",
+        "source": "module",
+        "default": 210
+      },
+      {
+        "name": "eks_ami_release_version",
+        "type": "string",
+        "description": "EKS-optimized AMI release version. Empty = pinned-latest for the cluster K8s minor version.",
+        "source": "module",
+        "default": ""
+      },
+      {
+        "name": "node_taints",
+        "type": "string",
+        "description": "Taints applied to HP nodes. Default empty.",
+        "source": "module",
+        "default": []
+      },
+      {
+        "name": "single_az_demo",
+        "type": "boolean",
+        "description": "Pin the HP node group + TMM subnets to a single AZ for demo/dev use.",
+        "source": "module",
+        "default": true
+      },
+      {
+        "name": "external_pci_fallback",
+        "type": "string",
+        "description": "Fallback external PCI bus id when iface-discovery is skipped (ens8 → 0000:00:08.0).",
+        "source": "module",
+        "default": "0000:00:08.0"
+      },
+      {
+        "name": "internal_pci_fallback",
+        "type": "string",
+        "description": "Fallback internal PCI bus id (ens7 → 0000:00:07.0).",
+        "source": "module",
+        "default": "0000:00:07.0"
+      },
+      {
+        "name": "external_ifname_fallback",
+        "type": "string",
+        "description": "Fallback external Linux ifname (device-index 3 → ens8).",
+        "source": "module",
+        "default": "ens8"
+      },
+      {
+        "name": "internal_ifname_fallback",
+        "type": "string",
+        "description": "Fallback internal Linux ifname (device-index 2 → ens7).",
+        "source": "module",
+        "default": "ens7"
+      },
+      {
+        "name": "create_namespace",
+        "type": "boolean",
+        "description": "Whether to create the cert-manager namespace (set false if it already exists).",
+        "source": "module",
+        "default": true
+      },
+      {
+        "name": "helm_timeout",
+        "type": "number",
+        "description": "Timeout in seconds for Helm operations (cert-manager install).",
+        "source": "module",
+        "default": 600
+      },
+      {
+        "name": "bnk_namespace",
+        "type": "string",
+        "description": "Operator namespace where OTEL certificates are created (gold-standard: f5-cne-core).",
+        "source": "module",
+        "default": "f5-cne-core"
+      },
+      {
+        "name": "tmm_mtu",
+        "type": "number",
+        "description": "TMM default MTU (TMM_DEFAULT_MTU). Proven value for AWS jumbo frames.",
+        "source": "module",
+        "default": 9000
+      },
+      {
+        "name": "tmm_cpu",
+        "type": "string",
+        "description": "TMM CPU limit/request.",
+        "source": "module",
+        "default": "2"
+      },
+      {
+        "name": "tmm_memory",
+        "type": "string",
+        "description": "TMM memory limit/request.",
+        "source": "module",
+        "default": "8Gi"
+      },
+      {
+        "name": "tmm_hugepages",
+        "type": "string",
+        "description": "TMM hugepages-2Mi limit/request.",
+        "source": "module",
+        "default": "4Gi"
+      },
+      {
+        "name": "pal_cpu_set",
+        "type": "string",
+        "description": "TMM PAL_CPU_SET (CPU pinning for TMM PAL thread).",
+        "source": "module",
+        "default": "0,2"
+      },
+      {
+        "name": "spkvlan_crd_timeout_seconds",
+        "type": "number",
+        "description": "Max seconds to wait for FLO to install f5-spk-vlans + gatewayclasses CRDs.",
+        "source": "module",
+        "default": 600
+      },
+      {
+        "name": "enable_bnk_gateway",
+        "type": "boolean",
+        "description": "Whether to render and apply the BNKGateway CR (kind: F5BnkGateway).",
+        "source": "module",
+        "default": false
+      },
+      {
+        "name": "cne_controller_sa_name",
+        "type": "string",
+        "description": "CNE controller ServiceAccount name pattern used in the IRSA trust policy.",
+        "source": "module",
+        "default": "f5-cne-controller-default-f5-cne-controller-serviceaccount"
+      },
+      {
+        "name": "cne_controller_deployment_name",
+        "type": "string",
+        "description": "CNE controller Deployment name; used to rollout-restart after annotating the SA.",
+        "source": "module",
+        "default": "f5-cne-controller"
+      },
+      {
+        "name": "wait_for_sa_timeout_seconds",
+        "type": "number",
+        "description": "Max seconds to wait for FLO to create the CNE controller SA after the CNEInstance CR is applied.",
+        "source": "module",
+        "default": 600
+      },
+      {
+        "name": "extra_irsa_managed_policy_arns",
+        "type": "string",
+        "description": "Additional managed IAM policy ARNs to attach to the CNE controller IRSA role.",
+        "source": "module",
+        "default": []
+      },
+      {
+        "name": "crd_poll_interval_seconds",
+        "type": "number",
+        "description": "Seconds between CRD pre-gate poll iterations.",
+        "source": "module",
+        "default": 5
       }
     ]
   },
