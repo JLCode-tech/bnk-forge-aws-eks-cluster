@@ -66,13 +66,13 @@ variable "jumphost_instance_type" {
 }
 
 variable "jumphost_volume_size" {
-  description = "Root EBS volume size in GiB for the jumphost instance."
+  description = "Root EBS volume size in GiB for the jumphost instance. Minimum 30 — the Amazon Linux 2023 AMI root snapshot is 30 GiB."
   type        = number
-  default     = 20
+  default     = 30
 
   validation {
-    condition     = var.jumphost_volume_size >= 8 && var.jumphost_volume_size <= 100
-    error_message = "jumphost_volume_size must be between 8 and 100 GiB."
+    condition     = var.jumphost_volume_size >= 30 && var.jumphost_volume_size <= 100
+    error_message = "jumphost_volume_size must be between 30 and 100 GiB (AL2023 root snapshot is 30 GiB)."
   }
 }
 

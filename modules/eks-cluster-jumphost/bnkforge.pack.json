@@ -123,9 +123,9 @@
       {
         "name": "jumphost_volume_size",
         "type": "number",
-        "description": "Root EBS volume size in GiB (8–100).",
+        "description": "Root EBS volume size in GiB (30-100; AL2023 root snapshot is 30 GiB).",
         "source": "user",
-        "default": 20
+        "default": 30
       },
       {
         "name": "kubectl_version",
