@@ -72,7 +72,7 @@ resource "aws_key_pair" "jumphost" {
 
 resource "aws_security_group" "jumphost" {
   name        = "${var.eks_cluster_name}-jumphost-sg"
-  description = "SSH access for EKS jumphost — locked to operator IP"
+  description = "SSH access for EKS jumphost - locked to operator IP"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -170,7 +170,7 @@ resource "aws_instance" "jumphost" {
     delete_on_termination = true
   }
 
-  user_data = base64encode(templatefile("${path.module}/manifests/jumphost-userdata.sh.tftpl", {
+  user_data_base64 = base64encode(templatefile("${path.module}/manifests/jumphost-userdata.sh.tftpl", {
     region          = var.aws_region
     cluster_name    = var.eks_cluster_name
     kubectl_version = var.kubectl_version
