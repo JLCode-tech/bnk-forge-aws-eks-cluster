@@ -1,0 +1,76 @@
+#!/bin/bash
+# =============================================================================
+# eks-cluster-jumphost — user-data bootstrap
+# Template vars: region, cluster_name, kubectl_version
+# =============================================================================
+# Runs as root at first boot on Amazon Linux 2023.
+# SSM agent is baked into AL2023 — no install needed.
+# =============================================================================
+set -euo pipefail
+
+export HOME=/root
+LOG=/var/log/jumphost-bootstrap.log
+exec > >(tee -a "$LOG") 2>&1
+
+echo "=== jumphost bootstrap start $(date -u) ==="
+
+# ---------------------------------------------------------------------------
+# 1. System packages
+# ---------------------------------------------------------------------------
+dnf install -y unzip curl jq
+
+# ---------------------------------------------------------------------------
+# 2. AWS CLI v2
+# ---------------------------------------------------------------------------
+if ! command -v aws &>/dev/null; then
+  echo "Installing AWS CLI v2..."
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+  unzip -q /tmp/awscliv2.zip -d /tmp/awscliv2
+  /tmp/awscliv2/aws/install
+  rm -rf /tmp/awscliv2 /tmp/awscliv2.zip
+  echo "AWS CLI $(aws --version) installed"
+fi
+
+# ---------------------------------------------------------------------------
+# 3. kubectl
+# ---------------------------------------------------------------------------
+KUBECTL_VERSION="${kubectl_version}"
+if ! command -v kubectl &>/dev/null; then
+  echo "Installing kubectl $KUBECTL_VERSION..."
+  curl -fsSL "https://dl.k8s.io/release/v$${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+    -o /usr/local/bin/kubectl
+  chmod +x /usr/local/bin/kubectl
+  echo "kubectl $(kubectl version --client --short 2>/dev/null || kubectl version --client) installed"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. jq (already installed above, confirm)
+# ---------------------------------------------------------------------------
+jq --version
+
+# ---------------------------------------------------------------------------
+# 5. kubeconfig helper — uses instance IAM role (no profile needed)
+# ---------------------------------------------------------------------------
+cat > /usr/local/bin/configure-kubectl.sh <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+REGION="${region}"
+CLUSTER="${cluster_name}"
+echo "Configuring kubectl for cluster $CLUSTER in $REGION..."
+aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER"
+echo "Done. Run: kubectl get nodes"
+SCRIPT
+chmod +x /usr/local/bin/configure-kubectl.sh
+
+# ---------------------------------------------------------------------------
+# 6. Auto-configure kubeconfig for ec2-user
+# ---------------------------------------------------------------------------
+# Attempt at boot; may fail if the cluster API is not yet reachable from
+# this IP (endpoint_public_access_cidrs gate). Safe to re-run manually.
+sudo -u ec2-user bash -c "
+  mkdir -p ~/.kube
+  aws eks update-kubeconfig --region '${region}' --name '${cluster_name}' 2>&1 || \
+    echo 'WARNING: update-kubeconfig failed — re-run configure-kubectl.sh once the API CIDR allows this IP'
+"
+
+echo "=== jumphost bootstrap complete $(date -u) ==="
