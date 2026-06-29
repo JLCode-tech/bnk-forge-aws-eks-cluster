@@ -2,7 +2,7 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-cluster-create-with-hp-nodes",
-    "version": "0.4.0",
+    "version": "0.4.1",
     "name": "Create EKS + HP + BNK 2.3",
     "description": "Provision a new AWS EKS cluster + a dedicated HP TMM node pool (dual secondary ENIs) and install the BNK 2.3 platform."
   },
