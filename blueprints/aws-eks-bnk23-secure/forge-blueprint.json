@@ -2,7 +2,7 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-bnk23-secure",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "name": "AWS EKS + BNK 2.3 Secure (Jump Host + Locked API)",
     "description": "Opinionated, one-shot greenfield deployment with hardened API access: provisions a new AWS EKS cluster with a CIDR-locked public endpoint (restricted to user_ip /32) and a bastion jump host for kubectl access. Includes validated BNK 2.3 Small node sizing (m6i.4xlarge \u00d7 3 for dSSM quorum), a dedicated HP TMM node pool (dual secondary ENIs), the full BNK 2.3 platform chain, and license activation gate. Note: a wrong user_ip strands forge from the public endpoint, but the jumphost is always reachable (private endpoint is always on) and can be used to recover kubectl access."
   },
