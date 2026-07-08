@@ -3,8 +3,8 @@
   "blueprint": {
     "id": "aws-eks-bnk23-traffic",
     "version": "0.5.6",
-    "name": "AWS EKS + BNK 2.3 Traffic-Ready (Opinionated)",
-    "description": "Opinionated, one-shot greenfield deployment: provisions a new AWS EKS cluster with validated BNK 2.3 Small node sizing (m6i.4xlarge \u00d7 3 for dSSM quorum), adds a dedicated HP TMM node pool (dual secondary ENIs), installs the full BNK 2.3 platform chain, and gates on license activation \u2014 all with sensible production defaults locked in. Power users may override sizing/replicas; the minimal path requires only a cluster name \u2014 credentials and secrets are resolved from project context."
+    "name": "Create EKS + BNK 2.3 Traffic-Ready",
+    "description": "Provision a new AWS EKS cluster with an HP TMM node pool, install the full BNK 2.3 platform, and activate the license \u2014 production defaults locked in, override sizing if needed."
   },
   "bnk_version": "2.3",
   "category": "infra",
@@ -115,21 +115,21 @@
       {
         "name": "worker_instance_type",
         "type": "string",
-        "description": "EC2 instance type for the default (BNK dSSM) node group. Default m6i.4xlarge is the validated BNK 2.3 Small minimum (16 vCPU / 64 GB, 4+ ENIs, dSSM quorum at \u00d73). Change only if you have confirmed an alternative meets the BNK 2.3 resource floor.",
+        "description": "EC2 instance type for the default (BNK dSSM) node group. Default m6i.4xlarge is the validated BNK 2.3 Small minimum.",
         "default": "m6i.4xlarge",
         "order": 30
       },
       {
         "name": "worker_count_per_az",
         "type": "number",
-        "description": "Default-pool nodes per AZ. Minimum 3 total for dSSM quorum (awsbnkctl enforces \u22653 desiredSize for BNK patterns). Default 1 per AZ across 3 AZs = 3 total.",
+        "description": "Default-pool nodes per AZ. Minimum 3 total for dSSM quorum. Default 1 per AZ across 3 AZs = 3 total.",
         "default": 1,
         "order": 31
       },
       {
         "name": "hp_instance_type",
         "type": "string",
-        "description": "EC2 instance type for HP TMM nodes. Default c5n.4xlarge (16 vCPU) is the awsbnkctl gold-standard HP/TMM node (doctor: 'needs \u22653 c5n.4xlarge'); the live syd-tracer cluster uses it. The BNK 2.3 Small f5-tmm pod requests ~4.7 vCPU + 4Gi hugepages, which does NOT fit on c5n.xlarge (4 vCPU). Must support \u22653 ENIs (CNI + ens7 + ens8). m5n is unavailable in some regions (e.g. ap-southeast-2); c5n.4xlarge / m6i.4xlarge are broadly available.",
+        "description": "EC2 instance type for HP TMM nodes. Default c5n.4xlarge (16 vCPU) fits the BNK 2.3 Small f5-tmm pod (~4.7 vCPU + 4Gi hugepages) and supports the 3 required ENIs; c5n.xlarge is too small.",
         "default": "c5n.4xlarge",
         "order": 32
       },
@@ -143,14 +143,14 @@
       {
         "name": "deployment_size",
         "type": "string",
-        "description": "CNEInstance deployment size: Small / Medium / Large / Max. Small is validated against m6i.4xlarge \u00d7 3 with awsbnkctl's live BNK 2.3 syd-tracer cluster.",
+        "description": "CNEInstance deployment size: Small / Medium / Large / Max. Small is validated against m6i.4xlarge \u00d7 3.",
         "default": "Small",
         "order": 40
       },
       {
         "name": "tmm_replicas",
         "type": "number",
-        "description": "TMM replicas. Default 1 \u2014 a demo/single-TMM deployment (matches awsbnkctl demo: one TMM in one AZ, simplest data-plane). Set 0 to auto-derive from AZ \u00d7 HP node count for a multi-TMM HA topology.",
+        "description": "TMM replicas. Default 1 \u2014 a single-TMM demo data-plane. Set 0 to auto-derive from AZ \u00d7 HP node count for a multi-TMM HA topology.",
         "default": 1,
         "order": 41
       },
