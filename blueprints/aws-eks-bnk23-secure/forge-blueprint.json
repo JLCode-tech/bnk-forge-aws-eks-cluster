@@ -2,7 +2,7 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-bnk23-secure",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "name": "Create EKS + BNK 2.3 Secure",
     "description": "Provision a new AWS EKS cluster with a CIDR-locked API endpoint and a bastion jump host, plus the full BNK 2.3 platform and HP TMM nodes. The jump host stays reachable even if the public endpoint locks you out."
   },
