@@ -2,12 +2,12 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-cluster-create-with-hp-nodes",
-    "version": "0.4.1",
+    "version": "0.4.2",
     "name": "Create EKS + HP + BNK 2.3",
     "description": "Provision a new AWS EKS cluster + a dedicated HP TMM node pool (dual secondary ENIs) and install the BNK 2.3 platform."
   },
   "bnk_version": "2.3",
-  "category": "infra",
+  "category": "infrastructure",
   "cloud_provider": "aws",
   "compatibility": {
     "supported_platform_profiles": [
@@ -18,7 +18,7 @@
   "icon": "Cloud",
   "color": "orange",
   "estimated_time": "35-55 minutes",
-  "estimated_cost": "AWS usage-based (cluster + default NG + ~3× m5n.large HP nodes + NAT)",
+  "estimated_cost": "AWS usage-based (cluster + default NG + ~3\u00d7 m5n.large HP nodes + NAT)",
   "difficulty": "advanced",
   "maturity": "alpha",
   "tags": [
@@ -140,7 +140,7 @@
       {
         "name": "tmm_replicas",
         "type": "number",
-        "description": "TMM replicas. 0 = auto-derive from AZ × HP node count.",
+        "description": "TMM replicas. 0 = auto-derive from AZ \u00d7 HP node count.",
         "default": 0,
         "order": 41
       },
@@ -158,7 +158,7 @@
       "id": "cluster-create",
       "name": "EKS Cluster Create",
       "module": "modules/eks-cluster-create",
-      "version": "0.1.0-beta",
+      "version": "0.3.0-beta",
       "depends_on": [],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
@@ -175,7 +175,7 @@
       "id": "hp-nodes",
       "name": "HP TMM Node Pool",
       "module": "modules/eks-cluster-hp-nodes",
-      "version": "0.3.0-alpha",
+      "version": "0.5.0-alpha",
       "depends_on": [
         "cluster-create"
       ],
@@ -202,7 +202,7 @@
       "id": "tmm-nads",
       "name": "TMM NADs (ens7/ens8)",
       "module": "modules/eks-cluster-install-tmm-nads",
-      "version": "0.3.0-alpha",
+      "version": "1.0.0-alpha",
       "depends_on": [
         "hp-nodes",
         "install-multus"
@@ -267,7 +267,7 @@
       "id": "cneinstall",
       "name": "CNEInstance + IRSA",
       "module": "modules/eks-cluster-cneinstall",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "depends_on": [
         "flo",
         "tmm-nads"

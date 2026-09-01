@@ -2,12 +2,12 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-bnk23-secure",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "name": "Create EKS + BNK 2.3 Secure",
     "description": "Provision a new AWS EKS cluster with a CIDR-locked API endpoint and a bastion jump host, plus the full BNK 2.3 platform and HP TMM nodes. The jump host stays reachable even if the public endpoint locks you out."
   },
   "bnk_version": "2.3",
-  "category": "infra",
+  "category": "infrastructure",
   "cloud_provider": "aws",
   "compatibility": {
     "supported_platform_profiles": [
@@ -18,7 +18,7 @@
   "icon": "Cloud",
   "color": "orange",
   "estimated_time": "40-60 minutes",
-  "estimated_cost": "AWS usage-based (cluster + 3\u00d7 m6i.4xlarge worker nodes + ~1\u00d7 c5n.xlarge HP node per AZ + NAT)",
+  "estimated_cost": "AWS usage-based (cluster + worker & HP nodes + NAT)",
   "difficulty": "intermediate",
   "maturity": "alpha",
   "tags": [
@@ -182,7 +182,7 @@
       "id": "cluster-create",
       "name": "EKS Cluster Create",
       "module": "modules/eks-cluster-create",
-      "version": "0.1.0-beta",
+      "version": "0.3.0-beta",
       "depends_on": [],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
@@ -194,7 +194,9 @@
         "worker_count_per_az": "${worker_count_per_az}",
         "tag_private_subnets_for_tmm": false,
         "eks_cluster_version": "1.32",
-        "endpoint_public_access_cidrs": ["${user_ip}"]
+        "endpoint_public_access_cidrs": [
+          "${user_ip}"
+        ]
       }
     },
     {
@@ -364,7 +366,7 @@
       "id": "license-gate",
       "name": "BNK License Activation Gate",
       "module": "modules/eks-cluster-license-activation-gate",
-      "version": "0.1.0-alpha",
+      "version": "0.2.0-alpha",
       "depends_on": [
         "cneinstall"
       ],

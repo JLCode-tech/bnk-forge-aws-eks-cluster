@@ -2,7 +2,7 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-existing-cluster",
-    "version": "0.8.1",
+    "version": "0.8.2",
     "name": "Existing EKS + BNK 2.3",
     "description": "Install the BNK 2.3 platform onto an existing AWS EKS cluster."
   },
@@ -114,7 +114,7 @@
       {
         "name": "tmm_replicas",
         "type": "number",
-        "description": "TMM replicas. 0 = auto-derive from cluster AZ × node count.",
+        "description": "TMM replicas. 0 = auto-derive from cluster AZ \u00d7 node count.",
         "default": 0,
         "order": 31
       },
@@ -192,7 +192,7 @@
       "id": "cneinstall",
       "name": "CNEInstance + IRSA",
       "module": "modules/eks-cluster-cneinstall",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "depends_on": [
         "flo"
       ],
