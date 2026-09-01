@@ -2,12 +2,12 @@
   "schema_version": 1,
   "blueprint": {
     "id": "aws-eks-bnk23-traffic",
-    "version": "0.5.7",
+    "version": "0.5.8",
     "name": "Create EKS + BNK 2.3 Traffic-Ready",
     "description": "Provision a new AWS EKS cluster with an HP TMM node pool, install the full BNK 2.3 platform, and activate the license \u2014 production defaults locked in, override sizing if needed."
   },
   "bnk_version": "2.3",
-  "category": "infra",
+  "category": "infrastructure",
   "cloud_provider": "aws",
   "compatibility": {
     "supported_platform_profiles": [
@@ -18,7 +18,7 @@
   "icon": "Cloud",
   "color": "orange",
   "estimated_time": "40-60 minutes",
-  "estimated_cost": "AWS usage-based (cluster + 3\u00d7 m6i.4xlarge worker nodes + ~1\u00d7 c5n.xlarge HP node per AZ + NAT)",
+  "estimated_cost": "AWS usage-based (cluster + worker & HP nodes + NAT)",
   "difficulty": "intermediate",
   "maturity": "alpha",
   "tags": [
@@ -168,7 +168,7 @@
       "id": "cluster-create",
       "name": "EKS Cluster Create",
       "module": "modules/eks-cluster-create",
-      "version": "0.1.0-beta",
+      "version": "0.3.0-beta",
       "depends_on": [],
       "inputs": {
         "aws_access_key_id": "${aws_access_key_id}",
@@ -349,7 +349,7 @@
       "id": "license-gate",
       "name": "BNK License Activation Gate",
       "module": "modules/eks-cluster-license-activation-gate",
-      "version": "0.1.0-alpha",
+      "version": "0.2.0-alpha",
       "depends_on": [
         "cneinstall"
       ],
